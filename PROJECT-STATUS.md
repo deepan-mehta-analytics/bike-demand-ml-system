@@ -71,13 +71,22 @@ ML pipeline complete (Training + Inference)
 
 ## 🚀 Next Step
 
-Implement FastAPI layer for prediction serving.
+Refactor API architecture by separating business logic from API layer.
 
 ---
-
 ## 🔜 Upcoming Tasks
 
-1. Build API (`api/app.py`)
-2. Load model + scaler + schema in API
-3. Create `/predict` endpoint
-4. Test via HTTP requests
+1. Create service layer (`services/predictor.py`)
+2. Move prediction logic out of API into service module
+3. Refactor API to call service layer
+4. Add request/response models for better structure
+5. Optimize pipeline (remove unnecessary scaling for Random Forest)
+---
+### API Layer (FastAPI)
+
+* FastAPI application implemented (`api/app.py`)
+* Health check endpoint (`/`) added
+* Prediction endpoint (`/predict`) created
+* Input validation using Pydantic schema
+* End-to-end inference via API confirmed
+* Swagger UI testing enabled (`/docs`)

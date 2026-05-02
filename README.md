@@ -46,6 +46,15 @@ This project evolves from data analytics into a structured ML system with:
 * Aligns input using saved schema
 * Generates predictions
 
+### API (`api/app.py`)
+
+* FastAPI-based inference service
+* Endpoint: `POST /predict`
+* Accepts JSON input matching feature schema
+* Returns predicted bike demand
+* Includes input validation using Pydantic
+* Interactive testing via Swagger UI (`/docs`)
+
 ---
 
 ## 📁 Project Structure

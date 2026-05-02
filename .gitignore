@@ -8,3 +8,4 @@ data/chroma_db/
 # ML artifacts
 *.pkl
 models/*.pkl
+.vscode/

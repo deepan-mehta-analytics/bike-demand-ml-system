@@ -116,4 +116,4 @@ Synchronised with the [README Roadmap](README.md#-roadmap):
 
 ## 🚀 Next Step
 
-Commit the 2026-05-05 cleanup pass (5 modified files + new `services/predictor.py`, plus `.claude/` added to `.gitignore`). Then begin Roadmap item #1: pin dependencies in `requirements.txt`.
+Commit the 2026-05-05 cleanup pass (5 modified files + new `services/predictor.py`, added to `.gitignore`). Then begin Roadmap item #1: pin dependencies in `requirements.txt`.

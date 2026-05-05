@@ -1,92 +1,43 @@
-# Import required libraries
-import pandas as pd  # for handling input data
-import joblib  # to load saved model and scaler
+# ── Imports ─────────────────────────────────────────────────────────
+import pandas as pd                                                   # to convert input JSON into DataFrame
+import joblib                                                         # to load saved model artifacts
 
-# Import feature engineering functions
-from models.features import create_features  # reuse same transformations used in training
-
-
-# -------------------------------
-# LOAD SAVED MODEL AND SCALER
-# -------------------------------
-
-# Load trained Random Forest model from disk
-model = joblib.load("models/random_forest_model.pkl")  # load trained model
-
-# Load scaler used during training
-scaler = joblib.load("models/scaler.pkl")  # load scaler to ensure consistent transformations
+from models.features import create_features                           # reuse training feature transformations
 
 
+# ── Load Artifacts ──────────────────────────────────────────────────
 
-# -------------------------------
-# CREATE SAMPLE INPUT DATA
-# -------------------------------
+def load_artifacts():
+    """Loads model and feature schema from disk.
 
-# Create a sample input (same structure as original dataset)
-data = {
-    "DATE": ["01/01/2018"],  # date in DD/MM/YYYY format
-    "HOUR": [10],
-    "TEMPERATURE": [5],
-    "HUMIDITY": [40],
-    "WIND_SPEED": [2.0],
-    "VISIBILITY": [2000],
-    "DEW_POINT_TEMPERATURE": [-5],
-    "SOLAR_RADIATION": [1.5],
-    "RAINFALL": [0.0],
-    "SNOWFALL": [0.0],
-    "SEASONS": ["Winter"],
-    "HOLIDAY": ["No Holiday"],
-    "FUNCTIONING_DAY": ["Yes"]
-}
-
-# Convert dictionary into DataFrame
-input_df = pd.DataFrame(data)  # ensures compatibility with pipeline
+    Returns:
+        model: trained ML model
+        feature_columns: list of expected feature columns
+    """
+    model = joblib.load("models/random_forest_model.pkl")             # load trained model artifact
+    feature_columns = joblib.load("models/feature_columns.pkl")       # load saved feature column schema
+    return model, feature_columns                                     # return both artifacts
 
 
-# -------------------------------
-# APPLY FEATURE ENGINEERING
-# -------------------------------
+# ── Prediction ──────────────────────────────────────────────────────
 
-# Apply same feature engineering as training phase
-input_df = create_features(input_df)  # adds year, month, day, dayofweek
+def predict(data, model, feature_columns):
+    """Generate predictions from raw input records.
 
+    Parameters:
+        data: list of dicts (input JSON from API)
+        model: trained ML model
+        feature_columns: expected feature schema (post one-hot encoding)
 
-# -------------------------------
-# ALIGN FEATURES WITH TRAINING DATA
-# -------------------------------
-
-# Drop DATE column (not used in model)
-input_df = input_df.drop(columns=["DATE"])  # remove datetime column
-
-# Convert categorical variables to numeric using one-hot encoding
-input_df = pd.get_dummies(input_df)  # same transformation as training
-
-
-# ⚠️ IMPORTANT: Align columns with training data
-# Some columns may be missing → we add them with 0
-# This ensures input shape matches model expectations
-
-# Load saved feature column structure
-feature_columns = joblib.load("models/feature_columns.pkl")  # ensures consistent schema
-
-# Align input with training feature columns
-input_df = input_df.reindex(columns=feature_columns, fill_value=0)  # fill missing columns with 0
-
-
-# -------------------------------
-# SCALE INPUT DATA
-# -------------------------------
-
-# Apply same scaler used during training
-input_scaled = scaler.transform(input_df)  # ensures consistency
-
-
-# -------------------------------
-# MAKE PREDICTION
-# -------------------------------
-
-# Predict bike demand
-prediction = model.predict(input_scaled)  # generate prediction
-
-# Print result
-print("Predicted Bike Count:", prediction[0])  # display predicted value
+    Returns:
+        predictions (numpy array)
+    """
+    input_df = pd.DataFrame(data)                                     # convert list of dicts into DataFrame
+    input_df = create_features(input_df)                              # apply same datetime-derived features as training
+    input_df = input_df.drop(columns=["DATE"])                        # drop raw datetime column (not a feature)
+    input_df = pd.get_dummies(input_df)                               # one-hot encode categorical variables
+    input_df = input_df.reindex(                                      # align to training schema, fill missing dummies with 0
+        columns=feature_columns, fill_value=0
+    )
+    predictions = model.predict(input_df)                             # generate predictions (RF needs no scaling)
+    return predictions                                                # return numpy array of predictions

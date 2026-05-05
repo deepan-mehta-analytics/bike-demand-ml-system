@@ -9,3 +9,5 @@ data/chroma_db/
 *.pkl
 models/*.pkl
 .vscode/
+# Claude Code project-local settings (per-developer, not committed)
+.claude/

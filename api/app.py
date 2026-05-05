@@ -1,99 +1,50 @@
-# Import FastAPI framework to build API
-from fastapi import FastAPI  # used to create API instance
+# ── Imports ─────────────────────────────────────────────────────────
+from typing import List                                    # type hint for batch request payload
+from fastapi import FastAPI                                # web framework powering the prediction API
+from pydantic import BaseModel                             # base class for request schema validation
 
-# Import required libraries for model inference
-import pandas as pd  # for handling input data
-import joblib  # to load saved model and scaler
-
-# Import feature engineering function
-from models.features import create_features  # reuse same transformations as training
-
-# Import Pydantic models for API requests and responses, used to define the structure of data sent in request and response
-# And to validate the data received by API endpoints
-
-from pydantic import BaseModel  # used to define structured input schema for API requests
+from services.predictor import predict_service            # service-layer prediction orchestrator
 
 
-# -------------------------------
-# DEFINE INPUT SCHEMA
-# -------------------------------
+# ── Input Schema ────────────────────────────────────────────────────
 
-class BikePredictionInput(BaseModel):
-    DATE: str  # date in DD/MM/YYYY format
-    HOUR: int  # hour of day (0–23)
-    TEMPERATURE: float  # temperature in Celsius
-    HUMIDITY: int  # humidity percentage
-    WIND_SPEED: float  # wind speed value
-    VISIBILITY: int  # visibility distance
-    DEW_POINT_TEMPERATURE: float  # dew point temperature
-    SOLAR_RADIATION: float  # solar radiation level
-    RAINFALL: float  # rainfall amount
-    SNOWFALL: float  # snowfall amount
-    SEASONS: str  # season category (e.g., Winter, Summer)
-    HOLIDAY: str  # holiday indicator (Yes/No)
-    FUNCTIONING_DAY: str  # system operational status (Yes/No)
-    
+class BikePredictionInput(BaseModel):                      # one record of model inputs
+    DATE: str                                              # date in DD/MM/YYYY format
+    HOUR: int                                              # hour of day (0-23)
+    TEMPERATURE: float                                     # temperature in Celsius
+    HUMIDITY: int                                          # relative humidity percentage
+    WIND_SPEED: float                                      # wind speed in m/s
+    VISIBILITY: int                                        # visibility distance (10m units)
+    DEW_POINT_TEMPERATURE: float                           # dew point temperature in Celsius
+    SOLAR_RADIATION: float                                 # solar radiation level (MJ/m^2)
+    RAINFALL: float                                        # rainfall amount in mm
+    SNOWFALL: float                                        # snowfall amount in cm
+    SEASONS: str                                           # season category (Spring/Summer/Autumn/Winter)
+    HOLIDAY: str                                           # holiday flag (Holiday / No Holiday)
+    FUNCTIONING_DAY: str                                   # whether the rental system is operational (Yes/No)
 
 
-# -------------------------------
-# INITIALIZE FASTAPI APP
-# -------------------------------
-
-app = FastAPI()  # create API application instance
+class PredictionRequest(BaseModel):                        # batch wrapper for multiple input records
+    data: List[BikePredictionInput]                        # list of records to predict on
 
 
-# -------------------------------
-# LOAD MODEL ARTIFACTS
-# -------------------------------
+# ── App ─────────────────────────────────────────────────────────────
 
-# Load trained model from disk
-model = joblib.load("models/random_forest_model.pkl")  # load saved Random Forest model
-
-# Load scaler used during training
-scaler = joblib.load("models/scaler.pkl")  # load saved scaler
-
-# Load feature column schema
-feature_columns = joblib.load("models/feature_columns.pkl")  # load feature structure
+app = FastAPI()                                            # create the FastAPI application instance
 
 
-# -------------------------------
-# ROOT ENDPOINT (HEALTH CHECK)
-# -------------------------------
+# ── Health Check ────────────────────────────────────────────────────
 
-@app.get("/")  # define root endpoint
+@app.get("/")                                              # root endpoint exposed for health checks
 def home():
-    return {"message": "Bike Demand Prediction API is running"}  # simple health check response
+    return {"message": "Bike Demand Prediction API is running"}  # simple response confirming service is up
 
 
-# -------------------------------
-# PREDICTION ENDPOINT
-# -------------------------------
+# ── Prediction Endpoint ─────────────────────────────────────────────
 
-@app.post("/predict")  # define POST endpoint for predictions
-def predict(data: BikePredictionInput):  # accept validated input schema
-    
-    # Convert validated input object to dictionary and wrap into DataFrame
-    input_df = pd.DataFrame([data.model_dump()])  # use model_dump() for Pydantic v2
-
-    # Preprocess the data
-
-    # Apply feature engineering
-    input_df = create_features(input_df)  # add datetime features
-
-    # Drop DATE column (not used in model)
-    input_df = input_df.drop(columns=["DATE"])  # remove raw datetime column
-
-    # Convert categorical variables to numeric
-    input_df = pd.get_dummies(input_df)  # one-hot encoding
-
-    # Align with training feature schema
-    input_df = input_df.reindex(columns=feature_columns, fill_value=0)  # ensure column consistency
-
-    # Scale input data
-    input_scaled = scaler.transform(input_df)  # apply same scaling as training
-
-    # Make prediction
-    prediction = model.predict(input_scaled)  # generate prediction
-
-    # Return result as JSON
-    return {"predicted_bike_count": float(prediction[0])}  # convert numpy to native type
+@app.post("/predict")                                      # POST endpoint for generating predictions
+def make_prediction(request: PredictionRequest):
+    """Validate input via Pydantic, delegate to the service layer, return predictions."""
+    input_data = [item.model_dump() for item in request.data]  # convert Pydantic models to plain dicts
+    predictions = predict_service(input_data)              # invoke service-layer prediction
+    return {"predictions": predictions}                    # return predictions as JSON response

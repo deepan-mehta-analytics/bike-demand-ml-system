@@ -135,5 +135,5 @@ if __name__ == "__main__":
     print(f"Train rows: {result['n_train']}  |  Test rows: {result['n_test']}")  # data split sizes
     print(f"MSE : {result['mse']:.2f}")                                # raw MSE value
     print(f"RMSE: {result['rmse']:.2f} bikes/hr")                      # interpretable RMSE
-    print(f"\nTop 10 Feature Importances:\n")                          # importance table header
+    print("\nTop 10 Feature Importances:\n")                          # importance table header
     print(result["top_features"].to_string(index=False))               # print without pandas row index

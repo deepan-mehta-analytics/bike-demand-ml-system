@@ -24,7 +24,7 @@ Seoul Schema (target column names and types):
 Usage:
     from data.prepare_city_data import prepare_london
 
-    df = prepare_london("data/raw/london_merged.csv")
+    df = prepare_london("data/raw/london/london_merged.csv")
     df.to_csv("data/processed/london_bike_sharing.csv", index=False)
 
     Then train:
@@ -130,7 +130,7 @@ def prepare_dc_from_joined(path: str) -> pd.DataFrame:
         dew_point_2m       — Celsius
 
     Parameters:
-        path: local path to the joined CSV (data/raw/dc_joined.csv)
+        path: local path to the joined CSV (data/raw/dc/dc_joined.csv)
 
     Returns:
         DataFrame in Seoul schema ready to pass to models/train.py
@@ -182,7 +182,7 @@ def nyc_bigquery_sql() -> str:
     Run via:
         bq query --use_legacy_sql=false --format=csv \\
             "$(python -c 'from data.prepare_city_data import nyc_bigquery_sql; print(nyc_bigquery_sql())')" \\
-            > data/raw/nyc_trips_hourly.csv
+            > data/raw/nyc/nyc_trips_hourly.csv
     """
     return """
     SELECT

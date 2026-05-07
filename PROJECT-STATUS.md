@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 2 + DC city addition | 🔄 In Progress | `cbe1c00` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 2 complete — 4 cities trained | ✅ Done | pending commit |
 | **bike_demand_prediction** | R Shiny dashboard | Phase 7H + DC city addition | 🔄 In Progress | `e837b8e` |
 
 ### Trained City Models
@@ -21,7 +21,7 @@ Both repos form a single portfolio system. Track them together here.
 | Seoul | UCI Seoul Bike Sharing | 8,760 | **173.21** | TEMPERATURE (0.34) | `models/artifacts/seoul/` |
 | London | Kaggle london_merged.csv | 17,414 | **228.58** | HOUR (0.71) | `models/artifacts/london/` |
 | NYC | BigQuery citibike_trips (2014–2018) + Open-Meteo | 34,187 | **345.69** | HOUR (0.52) | `models/artifacts/nyc/` |
-| Washington DC | Capital Bikeshare CSVs (2014–2018) + Open-Meteo | — | **pending** | — | `models/artifacts/dc/` 🔲 |
+| Washington DC | Capital Bikeshare CSVs (2014–2018) + Open-Meteo | 37,663 | **97.47** | HOUR (0.61) | `models/artifacts/dc/` ✅ |
 
 ### Next Milestones (Both Repos)
 
@@ -53,6 +53,8 @@ Both repos form a single portfolio system. Track them together here.
 * `services/predictor.py`: fallback to Seoul for cities without trained artifacts; city slug map routes "new york" → nyc, "washington dc" → dc
 * `data/prepare_city_data.py`: `prepare_london()`, `nyc_bigquery_sql()`, `prepare_nyc_from_joined()`, `prepare_dc_from_joined()`
 * `data/fetch_dc_weather.py`: Capital Bikeshare trip aggregation + Open-Meteo join + Seoul-schema prepare for DC
+* **Washington DC**: Capital Bikeshare CSVs (2014–2018) + Open-Meteo join via `data/fetch_dc_weather.py`; RMSE **97.47** bikes/hr; HOUR dominates (0.61); 37,663 hourly rows
+* `data/raw/` restructured: per-city subfolders (`seoul/`, `london/`, `nyc/`, `dc/trips/`); `requests` added to `requirements.txt`
 
 ### Infrastructure (containerisation + CI)
 * `requirements.txt` — 10 packages pinned; `pytest.ini` — `pythonpath = .`

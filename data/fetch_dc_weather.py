@@ -7,7 +7,7 @@
 #   1. Download Capital Bikeshare trip data for 2014-2018 from:
 #        https://capitalbikeshare.com/system-data
 #      Extract all quarterly/annual zip files into:
-#        data/raw/dc_trips/
+#        data/raw/dc/trips/
 #      The directory should contain multiple CSV files with columns including
 #      "Start date" (format: "YYYY-MM-DD HH:MM:SS").
 #
@@ -15,33 +15,39 @@
 #   python data/fetch_dc_weather.py
 #
 # Output files:
-#   data/raw/dc_trips_hourly.csv  — hourly trip counts aggregated from Capital Bikeshare
-#   data/raw/dc_weather.csv       — Open-Meteo historical hourly weather for DC
-#   data/raw/dc_joined.csv        — trips + weather joined on DATE + HOUR
+#   data/raw/dc/dc_trips_hourly.csv  — hourly trip counts aggregated from Capital Bikeshare
+#   data/raw/dc/dc_weather.csv       — Open-Meteo historical hourly weather for DC
+#   data/raw/dc/dc_joined.csv        — trips + weather joined on DATE + HOUR
 #   data/processed/dc_bike_sharing.csv — final Seoul-schema CSV ready for training
 #
 # Then train:
 #   python -m models.train --city dc --data data/processed/dc_bike_sharing.csv
 # =============================================================================
 
+# ── sys.path bootstrap ────────────────────────────────────────────────────────
+# Running as `python data/fetch_dc_weather.py` does not add the project root to
+# sys.path, so `from data.prepare_city_data import ...` fails without this fix.
+import sys                                                             # sys.path manipulation
+import os                                                              # path construction and existence check
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))  # add project root to path
+
 # ── Imports ───────────────────────────────────────────────────────────────────
 import glob                                                            # file pattern matching for CSV discovery
-import os                                                              # path construction and existence check
 import requests                                                        # HTTP client for Open-Meteo API
 import pandas as pd                                                    # DataFrame for all tabular operations
 
 
 # ── Step 1 — Aggregate Capital Bikeshare Trips to Hourly ──────────────────────
 
-TRIPS_DIR = "data/raw/dc_trips"                                        # directory user extracts zip files into
-TRIPS_HOURLY_OUT = "data/raw/dc_trips_hourly.csv"                      # output: one row per DATE+HOUR with count
+TRIPS_DIR = "data/raw/dc/trips"                                        # directory user extracts zip files into
+TRIPS_HOURLY_OUT = "data/raw/dc/dc_trips_hourly.csv"                   # output: one row per DATE+HOUR with count
 
 csv_files = glob.glob(os.path.join(TRIPS_DIR, "*.csv"))                # find all CSV files in the trips directory
 if not csv_files:                                                       # abort early if user has not downloaded data yet
     raise FileNotFoundError(
         f"No CSV files found in '{TRIPS_DIR}'.\n"
         "Download 2014-2018 zip files from https://capitalbikeshare.com/system-data\n"
-        f"and extract all CSVs into '{TRIPS_DIR}/'."
+        f"and extract all CSVs into 'data/raw/dc/trips/'."
     )
 
 print(f"Found {len(csv_files)} trip CSV file(s) in {TRIPS_DIR}")       # confirm how many files were discovered
@@ -70,7 +76,7 @@ print(f"\nTotal trip rows before filtering: {len(trips_all):,}")       # show co
 
 # ── Parse datetime and filter to 2014-2018 ────────────────────────────────────
 trips_all["start_dt"] = pd.to_datetime(                                # parse start timestamp to Timestamp object
-    trips_all["started_at"], infer_datetime_format=True                # handle both common datetime string formats
+    trips_all["started_at"]                                            # pandas 3.x infers format automatically
 )
 mask = trips_all["start_dt"].dt.year.between(2014, 2018)               # limit to 5-year training window (matching NYC)
 trips_all = trips_all[mask].copy()                                     # filter to target year range
@@ -86,14 +92,14 @@ hourly = (                                                             # group b
     .size()                                                            # count rows (= trips started) in each group
     .rename(columns={"size": "RENTED_BIKE_COUNT"})                     # rename count to Seoul target column name
 )
-os.makedirs("data/raw", exist_ok=True)                                 # ensure output directory exists
+os.makedirs("data/raw/dc", exist_ok=True)                              # ensure DC output directory exists
 hourly.to_csv(TRIPS_HOURLY_OUT, index=False)                           # write hourly aggregates to disk
 print(f"Hourly trip counts: {len(hourly):,} rows -> {TRIPS_HOURLY_OUT}")  # confirm output
 
 
 # ── Step 2 — Fetch Open-Meteo Historical Weather for Washington DC ─────────────
 
-WEATHER_OUT = "data/raw/dc_weather.csv"                                # output: one row per hour
+WEATHER_OUT = "data/raw/dc/dc_weather.csv"                              # output: one row per hour
 
 url = "https://archive-api.open-meteo.com/v1/archive"                 # Open-Meteo historical archive endpoint (free)
 params = {
@@ -132,7 +138,7 @@ print(f"Weather rows: {len(weather):,} -> {WEATHER_OUT}")             # confirm 
 
 # ── Step 3 — Join Trips + Weather on DATE + HOUR ─────────────────────────────
 
-JOINED_OUT = "data/raw/dc_joined.csv"                                  # output: trips + weather merged
+JOINED_OUT = "data/raw/dc/dc_joined.csv"                               # output: trips + weather merged
 
 trips = pd.read_csv(TRIPS_HOURLY_OUT)                                  # reload hourly trip counts from disk
 joined = trips.merge(weather, on=["DATE", "HOUR"], how="inner")        # inner join: only hours with both trips + weather

@@ -1,6 +1,6 @@
 # ── fetch_nyc_weather.py ───────────────────────────────────────────────────────
 # Fetches historical hourly weather for NYC from Open-Meteo (free, no auth),
-# joins with the BigQuery Citi Bike trip counts in data/raw/nyc_trips_hourly.csv,
+# joins with the BigQuery Citi Bike trip counts in data/raw/nyc/nyc_trips_hourly.csv,
 # and produces data/processed/nyc_bike_sharing.csv in the Seoul 14-column schema.
 #
 # Run from the project root:
@@ -14,7 +14,7 @@ from pathlib import Path                                          # cross-platfo
 from data.prepare_city_data import prepare_nyc_from_joined        # Seoul-schema normaliser
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-RAW_DIR       = Path("data/raw")                                  # directory for raw source files
+RAW_DIR       = Path("data/raw/nyc")                              # NYC-specific raw data subdirectory
 PROCESSED_DIR = Path("data/processed")                            # directory for schema-normalised files
 TRIPS_CSV     = RAW_DIR / "nyc_trips_hourly.csv"                  # BigQuery export: DATE, HOUR, RENTED_BIKE_COUNT
 WEATHER_CSV   = RAW_DIR / "nyc_weather.csv"                       # Open-Meteo output: hourly weather columns

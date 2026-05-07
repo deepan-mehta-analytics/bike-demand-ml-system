@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]                           # run on every push to main
+  pull_request:
+    branches: ["main"]                           # run on PRs targeting main
+
+jobs:
+
+  # ── Job 1: Lint ──────────────────────────────────────────────────────────
+  lint:
+    name: Ruff lint
+    runs-on: ubuntu-latest                       # standard GitHub-hosted runner
+    steps:
+      - uses: actions/checkout@v4                # check out source
+      - uses: actions/setup-python@v5            # provision Python
+        with:
+          python-version: "3.11"                 # match Dockerfile base image version
+      - run: pip install ruff==0.15.12           # install pinned linter only — no full requirements needed
+      - run: ruff check .                        # lint all Python files (respects .gitignore; skips venv/)
+
+  # ── Job 2: Test ───────────────────────────────────────────────────────────
+  test:
+    name: pytest
+    runs-on: ubuntu-latest                       # standard runner
+    needs: lint                                  # skip tests if lint fails
+    steps:
+      - uses: actions/checkout@v4                # check out source
+      - uses: actions/setup-python@v5            # provision Python
+        with:
+          python-version: "3.11"                 # consistent Python version across all jobs
+      - run: pip install -r requirements.txt     # install all pinned project dependencies
+      - run: python -m models.train              # train model; -m adds project root to sys.path so package imports resolve
+      - run: pytest tests/                       # run full test suite
+
+  # ── Job 3: Docker Build ───────────────────────────────────────────────────
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest                       # standard runner
+    needs: test                                  # only build image if tests pass
+    steps:
+      - uses: actions/checkout@v4                # check out source
+      - run: docker build -t bike-demand-ml-system:ci .  # build image; non-zero exit fails the job

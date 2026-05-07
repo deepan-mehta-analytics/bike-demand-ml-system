@@ -1,0 +1,10 @@
+venv/
+.git/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.vscode/
+.claude/
+models/*.pkl
+data/chroma_db/

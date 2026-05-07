@@ -131,7 +131,7 @@ if __name__ == "__main__":
         random_state=args.random_state,                                # reproducibility seed
     )
 
-    print(f"Artifacts saved → {result['artifact_dir']}")               # confirm artifact save location
+    print(f"Artifacts saved -> {result['artifact_dir']}")               # confirm artifact save location
     print(f"Train rows: {result['n_train']}  |  Test rows: {result['n_test']}")  # data split sizes
     print(f"MSE : {result['mse']:.2f}")                                # raw MSE value
     print(f"RMSE: {result['rmse']:.2f} bikes/hr")                      # interpretable RMSE

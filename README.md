@@ -264,11 +264,13 @@ Artifacts stored at `models/artifacts/<city>/` — train each city with `python 
 |------|---------|------|-----------------|-------------|--------|
 | Seoul | UCI Seoul Bike Sharing | 8,760 | **173.21** | TEMPERATURE (0.34) | ✅ Trained |
 | London | Kaggle London Bike Sharing | 17,414 | **228.58** | HOUR (0.71) | ✅ Trained |
-| NYC | BigQuery `new_york_citibike` + Open-Meteo | — | — | — | Pending data prep |
+| NYC | BigQuery `new_york_citibike` + Open-Meteo | 34,187 | **345.69** | HOUR (0.52) | ✅ Trained |
+
+NYC is the most hour-driven of the three cities — HOUR alone accounts for 52% of feature importance, reflecting New York's dense commuter cycling pattern. Higher RMSE vs Seoul/London reflects NYC's larger absolute trip volumes (hundreds per hour vs tens).
 
 London's model is dominated by HOUR (0.71 importance vs 0.30 for Seoul), reflecting London's strong commuter cycling pattern. Missing columns (VISIBILITY, DEW_POINT_TEMPERATURE, SOLAR_RADIATION) were zeroed — sourcing these would likely reduce RMSE further.
 
-See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL.
+See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL + `data/fetch_nyc_weather.py` for the Open-Meteo join script.
 
 ### Seoul — Random Forest Regressor
 
@@ -296,6 +298,34 @@ See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL.
 | 10 | `day` | 0.009 |
 
 **Key insight surfaced by the model:** Temperature and hour-of-day dominate the forecast. This is consistent with rider behaviour driven by commuting cycles and weather comfort — a sanity check that the model has learned something real, not artifacts of the encoding.
+
+### NYC — Random Forest Regressor
+
+| Metric | Value |
+|---|---|
+| Algorithm | Random Forest Regressor (`n_estimators=100`, `random_state=42`) |
+| RMSE | **345.69** |
+| MSE | 119,501.86 |
+| Train / Test split | 80 / 20 (`random_state=42`) |
+| Data source | BigQuery `new_york_citibike.citibike_trips` (2014–2018) + Open-Meteo historical weather |
+| Rows | 34,187 hourly observations |
+
+### NYC Top Feature Importances
+
+| Rank | Feature | Importance |
+|---|---|---|
+| 1 | `HOUR` | 0.517 |
+| 2 | `TEMPERATURE` | 0.180 |
+| 3 | `year` | 0.116 |
+| 4 | `dayofweek` | 0.080 |
+| 5 | `RAINFALL` | 0.030 |
+| 6 | `HUMIDITY` | 0.022 |
+| 7 | `month` | 0.013 |
+| 8 | `WIND_SPEED` | 0.011 |
+| 9 | `day` | 0.011 |
+| 10 | `DEW_POINT_TEMPERATURE` | 0.011 |
+
+**Key insight:** NYC's HOUR dominance (0.52 vs 0.30 for Seoul) reflects the intensity of New York's commuter cycling peaks. `year` ranks 3rd (0.12) — a strong growth trend as Citi Bike expanded from 2014 to 2018 — which Seoul and London don't show as prominently.
 
 ---
 

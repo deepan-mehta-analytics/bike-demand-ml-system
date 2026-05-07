@@ -171,7 +171,7 @@ def prepare_nyc_from_joined(path: str) -> pd.DataFrame:
     df["TEMPERATURE"] = df["temperature_2m"].astype(float)             # rename Open-Meteo column to Seoul name
     df["HUMIDITY"] = df["relative_humidity_2m"].round().astype(int)    # round to nearest integer percent
     df["WIND_SPEED"] = df["wind_speed_10m"].astype(float)              # Open-Meteo wind speed is already in m/s
-    df["VISIBILITY"] = (df["visibility"] / 10).round().astype(int)     # convert metres to 10m units (÷ 10)
+    df["VISIBILITY"] = (df["visibility"] / 10).round().fillna(0).astype(int)  # convert metres to 10m units; 0 = not available
     df["DEW_POINT_TEMPERATURE"] = df["dew_point_2m"].astype(float)     # rename Open-Meteo column
     df["SOLAR_RADIATION"] = 0.0                                        # not available from Open-Meteo free tier; fill 0
     df["RAINFALL"] = df["precipitation"].astype(float)                 # rename precipitation to RAINFALL

@@ -2,9 +2,10 @@
 
 ## Current Stage
 
-Foundation infrastructure complete (as of 2026-05-07). Full ML pipeline, FastAPI service, tests,
-Dockerfile, and CI are all live on `main`. Next milestone: Phase 2 — multi-city training pipeline
-(London, NYC datasets added alongside Seoul).
+Phase 2 multi-city: Seoul (RMSE 173.21) and London (RMSE 228.58) trained and live on `main`
+(as of 2026-05-07). Per-city routing wired in the API and service layer. NYC model pending —
+data fetch script not yet written. Cross-repo sync gap identified in R Shiny companion repo
+(missing city field in FastAPI POST body).
 
 This repo is the **Python backend** in a two-repo portfolio ecosystem:
 - **This repo** — FastAPI inference service, GCP data pipeline (Pub/Sub + Dataflow), ML training
@@ -104,28 +105,36 @@ Re-entry command for new sessions: `"resume bike-demand-ml-system project"`
 
 ## ⚠️ Known Limitations
 
-* No `requirements.txt` / `pyproject.toml` yet (dependencies installed ad-hoc)
+* ~~No `requirements.txt` / `pyproject.toml` yet~~ — added (Phase 7, 10 packages pinned)
+* ~~No automated test suite~~ — 14 tests: 9 unit + 5 integration (Phase 7)
+* ~~No CI/CD pipeline~~ — GitHub Actions: ruff → pytest → docker build (Phase 7)
+* ~~No containerised deployment~~ — Dockerfile + docker-compose.yml (Phase 7)
 * No hyperparameter tuning (single fixed RF configuration)
 * No experiment tracking (no MLflow / W&B integration)
-* No automated test suite (unit / integration)
-* No CI/CD pipeline (no GitHub Actions)
-* No containerised deployment (no Dockerfile / compose)
 * No request authentication or rate-limiting on the API
 * No structured logging or observability hooks in the service layer
 * No drift monitoring on inference inputs
+* **Service layer crashes for untrained cities** — Paris and Chicago have no model artifacts;
+  need a fallback to Seoul (pending)
+* **R Shiny city routing broken** — `predict_bike_demand_fastapi()` sends no `city` field;
+  all 5 dashboard cities silently get Seoul model predictions (pending fix in R Shiny repo)
 
 ---
 
 ## 🔜 Roadmap
 
-### Phase 2 — Multi-City Training ← **next**
-* Extend `models/train.py` to accept `--city` CLI arg; persist to `models/artifacts/<city>/`
-* Update `models/predict.py` to load artifact by city name; default to `"seoul"` if not found
-* Add `city: str = "Seoul"` field to `PredictRequest` Pydantic model in `api/app.py`
-* Train on London (`bigquery-public-data.london_bicycles`) and NYC (`bigquery-public-data.new_york_citibike`)
-* README: multi-city RMSE comparison table
-* Decision at Phase 2 start: per-city artifacts (separate `.pkl`) vs unified model with city as feature
-  → **Recommended**: per-city artifacts — simpler, interpretable RMSE per city, no data leakage
+### Phase 2 — Multi-City Training [IN PROGRESS]
+* ~~Extend `models/train.py` to accept `--city` CLI arg~~ — done (bb9cbaa)
+* ~~Add `city: str = "Seoul"` to `PredictRequest`; per-city service cache~~ — done (bb9cbaa)
+* ~~London data prepared (Kaggle london_merged.csv) + model trained — RMSE 228.58~~ — done
+* ~~Seoul retrained with new CLI infrastructure — RMSE 173.21~~ — done
+* NYC data: `bq query` using `nyc_bigquery_sql()` → `data/raw/nyc_trips_hourly.csv`,
+  then Open-Meteo weather API → join → `prepare_nyc_from_joined()` ← **next**
+  (requires `gcloud auth login`; `bigquery-public-data` is free to query)
+* Add fallback in `services/predictor.py` for cities without trained artifacts → use Seoul
+* Fix R Shiny: add `city` arg to `predict_bike_demand_fastapi()` + per-city `group_modify()`
+  in `generate_city_weather_bike_data()` (companion repo: `shiny_app/model_prediction.R`)
+* README: populate NYC row in multi-city RMSE table
 
 ### Phase 3 — Cloud Run Deployment
 * `cloudbuild.yaml` or GH Actions step — build → push to Artifact Registry
@@ -136,6 +145,7 @@ Re-entry command for new sessions: `"resume bike-demand-ml-system project"`
 * `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB` env var switches local vs GCP
 * `pipeline/dataflow_job.py` — Apache Beam: Pub/Sub → 5-min window → BigQuery / DuckDB
 * `config/gcp_config.yaml` — project ID, topic, BQ dataset, staging bucket, region
+* (Companion Shiny repo Phase 7F also triggers off this phase)
 
 ### Phase 5 — Vertex AI + Experiment Tracking
 * MLflow `autolog()` in `models/train.py`; register model if RMSE improves
@@ -149,4 +159,6 @@ Re-entry command for new sessions: `"resume bike-demand-ml-system project"`
 
 ## 🚀 Next Step
 
-**Phase 2 — Multi-City Training.** Resume with: `"resume bike-demand-ml-system project"`
+**Phase 2 — NYC model.** Authenticate with `! gcloud auth login`, export BigQuery trips via
+`nyc_bigquery_sql()`, fetch Open-Meteo weather, join, train, then fix R Shiny city routing.
+Resume with: `"resume bike-demand-ml-system project"`

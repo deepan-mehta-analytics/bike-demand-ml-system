@@ -25,7 +25,7 @@ It is engineered as the next stage in a data analytics → data engineering → 
 ## 📌 Project Overview
 This project implements an **end-to-end machine learning system** for forecasting hourly bike-rental demand. It evolves from data analytics into a structured ML platform with a clean separation between training, persistence, business logic, and API delivery.
 
-It uses the [Seoul Bike Sharing Demand Dataset (UCI)](https://archive.ics.uci.edu/dataset/560/seoul+bike+sharing+demand), demonstrating ML engineering patterns required to ship a model from notebook into a deployable API.
+It trains across **four cities** (Seoul, London, NYC, Washington DC) on a shared 14-column schema, demonstrating ML engineering patterns required to ship a model from notebook into a deployable multi-city API.
 
 It implements:
 
@@ -459,13 +459,16 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 
 ## 📂 Dataset
 
-**Source:** [UCI Machine Learning Repository — Seoul Bike Sharing Demand](https://archive.ics.uci.edu/dataset/560/seoul+bike+sharing+demand)
+Four city datasets are normalised to a common 14-column Seoul schema before training. All processed files live in `data/processed/`.
 
-- 8,760 hourly observations (Dec 2017 – Nov 2018)
-- 13 input features:
-  - **Temporal** — date, hour, season, holiday flag, functioning-day flag
-  - **Meteorological** — temperature, humidity, wind speed, visibility, dew point, solar radiation, rainfall, snowfall
-- **Target:** hourly count of bikes rented (`RENTED_BIKE_COUNT`)
+| City | Source | Rows | Period | Notes |
+|------|--------|------|--------|-------|
+| **Seoul** | [UCI Seoul Bike Sharing Demand](https://archive.ics.uci.edu/dataset/560/seoul+bike+sharing+demand) | 8,760 | Dec 2017 – Nov 2018 | Original dataset; all 14 features present |
+| **London** | [Kaggle London Bike Sharing](https://www.kaggle.com/datasets/hmavrodiev/london-bike-sharing-dataset) | 17,414 | Jan 2015 – Jan 2017 | 3 meteorological columns absent (zeroed) |
+| **NYC** | [BigQuery `new_york_citibike`](https://console.cloud.google.com/marketplace/product/city-of-new-york/nyc-citi-bike) + [Open-Meteo](https://open-meteo.com/) | 34,187 | Jan 2014 – Dec 2018 | Trip counts from BigQuery; weather joined via `fetch_nyc_weather.py` |
+| **Washington DC** | [Capital Bikeshare system data](https://capitalbikeshare.com/system-data) + [Open-Meteo](https://open-meteo.com/) | 37,663 | Jan 2014 – Dec 2018 | Trip counts aggregated from quarterly CSVs; weather joined via `fetch_dc_weather.py` |
+
+**Shared schema (14 columns):** `DATE`, `HOUR`, `TEMPERATURE`, `HUMIDITY`, `WIND_SPEED`, `VISIBILITY`, `DEW_POINT_TEMPERATURE`, `SOLAR_RADIATION`, `RAINFALL`, `SNOWFALL`, `SEASONS`, `HOLIDAY`, `FUNCTIONING_DAY`, `RENTED_BIKE_COUNT`
 
 ---
 

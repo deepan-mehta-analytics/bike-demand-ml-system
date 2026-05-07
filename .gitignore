@@ -5,9 +5,10 @@ venv/
 rag-env/
 aider-env/
 data/chroma_db/
-# ML artifacts
+# ML artifacts — per-city model and schema files (regenerate with: python -m models.train --city <name>)
 *.pkl
-models/*.pkl
+models/artifacts/**
+!models/artifacts/.gitkeep
 .vscode/
 # Claude Code project-local settings (per-developer, not committed)
 .claude/

@@ -50,9 +50,9 @@ async def test_valid_single_record_returns_200():
         base_url="http://test",
     ) as client:
         with patch("api.app.predict_service", return_value=[605.0]):  # mock service layer; no .pkl files needed
-            response = await client.post(                     # send single-record batch
+            response = await client.post(
                 "/predict",
-                json={"data": [VALID_RECORD]},                # Pydantic expects a 'data' list wrapper
+                json={"city": "Seoul", "data": [VALID_RECORD]},  # explicit city field + single record
             )
     assert response.status_code == 200                        # must succeed
     body = response.json()                                    # parse response body
@@ -70,11 +70,28 @@ async def test_valid_batch_returns_200():
         with patch("api.app.predict_service", return_value=[605.0, 435.0]):  # mock two predictions
             response = await client.post(
                 "/predict",
-                json={"data": [VALID_RECORD, VALID_RECORD]},  # two identical records (schema test, not values)
+                json={"city": "Seoul", "data": [VALID_RECORD, VALID_RECORD]},  # two records
             )
     assert response.status_code == 200                        # must succeed
     body = response.json()                                    # parse response body
     assert len(body["predictions"]) == 2                      # two records → two predictions
+
+
+@pytest.mark.anyio                                            # anyio runs this coroutine on asyncio
+async def test_city_field_defaults_to_seoul():
+    """POST /predict without a city field must default to Seoul and route correctly."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app),                     # in-process ASGI transport
+        base_url="http://test",
+    ) as client:
+        with patch("api.app.predict_service", return_value=[500.0]) as mock_svc:  # capture call arguments
+            response = await client.post(
+                "/predict",
+                json={"data": [VALID_RECORD]},                # omit city — Pydantic default should apply
+            )
+    assert response.status_code == 200                        # must not error on missing optional city field
+    _, kwargs = mock_svc.call_args                            # inspect the keyword args passed to mock
+    assert kwargs.get("city") == "seoul"                      # city must be lowercased to "seoul" by the endpoint
 
 
 # ── Invalid Input → 422 ───────────────────────────────────────────────────
@@ -89,7 +106,7 @@ async def test_invalid_hour_type_returns_422():
     ) as client:
         response = await client.post(
             "/predict",
-            json={"data": [bad_record]},                      # Pydantic validation should reject this
+            json={"city": "Seoul", "data": [bad_record]},     # Pydantic validation should reject HOUR type
         )
     assert response.status_code == 422                        # Pydantic must return 422 Unprocessable Entity
 
@@ -104,6 +121,6 @@ async def test_missing_required_field_returns_422():
     ) as client:
         response = await client.post(
             "/predict",
-            json={"data": [incomplete]},                      # Pydantic validation should reject missing field
+            json={"city": "Seoul", "data": [incomplete]},     # Pydantic validation should reject missing field
         )
     assert response.status_code == 422                        # Pydantic must return 422 Unprocessable Entity

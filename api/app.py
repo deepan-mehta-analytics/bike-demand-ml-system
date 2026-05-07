@@ -1,50 +1,52 @@
-# ── Imports ─────────────────────────────────────────────────────────
-from typing import List                                    # type hint for batch request payload
-from fastapi import FastAPI                                # web framework powering the prediction API
-from pydantic import BaseModel                             # base class for request schema validation
+# ── Imports ─────────────────────────────────────────────────────────────────
+from typing import List                                                # type hint for batch record list
+from fastapi import FastAPI                                            # web framework powering the inference API
+from pydantic import BaseModel                                         # base class for request schema validation
 
-from services.predictor import predict_service            # service-layer prediction orchestrator
-
-
-# ── Input Schema ────────────────────────────────────────────────────
-
-class BikePredictionInput(BaseModel):                      # one record of model inputs
-    DATE: str                                              # date in DD/MM/YYYY format
-    HOUR: int                                              # hour of day (0-23)
-    TEMPERATURE: float                                     # temperature in Celsius
-    HUMIDITY: int                                          # relative humidity percentage
-    WIND_SPEED: float                                      # wind speed in m/s
-    VISIBILITY: int                                        # visibility distance (10m units)
-    DEW_POINT_TEMPERATURE: float                           # dew point temperature in Celsius
-    SOLAR_RADIATION: float                                 # solar radiation level (MJ/m^2)
-    RAINFALL: float                                        # rainfall amount in mm
-    SNOWFALL: float                                        # snowfall amount in cm
-    SEASONS: str                                           # season category (Spring/Summer/Autumn/Winter)
-    HOLIDAY: str                                           # holiday flag (Holiday / No Holiday)
-    FUNCTIONING_DAY: str                                   # whether the rental system is operational (Yes/No)
+from services.predictor import predict_service                         # service-layer prediction orchestrator
 
 
-class PredictionRequest(BaseModel):                        # batch wrapper for multiple input records
-    data: List[BikePredictionInput]                        # list of records to predict on
+# ── Input Schema ─────────────────────────────────────────────────────────────
+
+class BikePredictionInput(BaseModel):                                  # one weather/temporal record for a single hour
+    DATE: str                                                          # date string in DD/MM/YYYY format
+    HOUR: int                                                          # hour of day (0-23)
+    TEMPERATURE: float                                                 # temperature in degrees Celsius
+    HUMIDITY: int                                                      # relative humidity as a percentage
+    WIND_SPEED: float                                                  # wind speed in m/s
+    VISIBILITY: int                                                    # visibility in 10-metre units
+    DEW_POINT_TEMPERATURE: float                                       # dew point temperature in Celsius
+    SOLAR_RADIATION: float                                             # solar radiation in MJ/m^2
+    RAINFALL: float                                                    # rainfall in mm
+    SNOWFALL: float                                                    # snowfall in cm
+    SEASONS: str                                                       # season label (Spring/Summer/Autumn/Winter)
+    HOLIDAY: str                                                       # holiday flag (Holiday / No Holiday)
+    FUNCTIONING_DAY: str                                               # system operational flag (Yes / No)
 
 
-# ── App ─────────────────────────────────────────────────────────────
+class PredictionRequest(BaseModel):                                    # top-level request: city + batch of hourly records
+    city: str = "Seoul"                                                # city to predict for; must match a trained artifact
+    data: List[BikePredictionInput]                                    # one or more hourly input records to score
 
-app = FastAPI()                                            # create the FastAPI application instance
+
+# ── App ───────────────────────────────────────────────────────────────────────
+
+app = FastAPI()                                                        # create the FastAPI application instance
 
 
-# ── Health Check ────────────────────────────────────────────────────
+# ── Health Check ──────────────────────────────────────────────────────────────
 
-@app.get("/")                                              # root endpoint exposed for health checks
+@app.get("/")                                                          # root path; polled by Docker and Shiny healthchecks
 def home():
-    return {"message": "Bike Demand Prediction API is running"}  # simple response confirming service is up
+    return {"message": "Bike Demand Prediction API is running"}        # simple liveness confirmation response
 
 
-# ── Prediction Endpoint ─────────────────────────────────────────────
+# ── Prediction Endpoint ───────────────────────────────────────────────────────
 
-@app.post("/predict")                                      # POST endpoint for generating predictions
+@app.post("/predict")                                                  # POST endpoint for batch demand predictions
 def make_prediction(request: PredictionRequest):
-    """Validate input via Pydantic, delegate to the service layer, return predictions."""
-    input_data = [item.model_dump() for item in request.data]  # convert Pydantic models to plain dicts
-    predictions = predict_service(input_data)              # invoke service-layer prediction
-    return {"predictions": predictions}                    # return predictions as JSON response
+    """Validate input via Pydantic, dispatch to the service layer, return predictions."""
+    city = request.city.lower()                                        # normalise city to lowercase for artifact lookup
+    input_data = [item.model_dump() for item in request.data]          # convert Pydantic models to plain dicts
+    predictions = predict_service(input_data, city=city)               # route to per-city artifacts via service layer
+    return {"predictions": predictions}                                # return list of floats as JSON

@@ -1,45 +1,50 @@
-# ── Imports ─────────────────────────────────────────────────────────
-from typing import List, Dict                                         # type hints for service interface
+# ── Imports ─────────────────────────────────────────────────────────────────
+from typing import Dict, List                                          # type hints for cache and service interface
 
-from models.predict import load_artifacts, predict                    # reuse inference utilities (no duplication)
-
-
-# ── Artifact Cache (Lazy Singleton) ─────────────────────────────────
-# Artifacts are loaded on first use, not at import time, so that:
-#  - importing this module does not crash if .pkl files are missing
-#  - tests and tooling can import without requiring a trained model
-#  - the cost of loading is paid once, then cached for the process lifetime
-_artifacts = None                                                     # module-level cache, populated lazily
+from models.predict import load_artifacts, predict                     # inference utilities from ML layer
 
 
-def _get_artifacts():
-    """Load model artifacts on first call; return the cached pair afterwards."""
-    global _artifacts                                                 # mutate module-level cache
-    if _artifacts is None:                                            # only load on first invocation
-        _artifacts = load_artifacts()                                 # (model, feature_columns)
-    return _artifacts                                                 # cached tuple for subsequent calls
+# ── Per-City Artifact Cache ──────────────────────────────────────────────────
+# Artifacts are loaded on first call for each city, then cached for the process lifetime.
+#
+# Design rationale:
+#   - Importing this module never crashes even if .pkl files are absent
+#   - Each city's artifacts are loaded once per process, not on every request
+#   - New cities are added to the cache on their first request with no restart required
+
+_cache: Dict[str, tuple] = {}                                          # keyed by lowercase city name → (model, schema)
 
 
-# ── Service Layer ───────────────────────────────────────────────────
+def _get_artifacts(city: str) -> tuple:
+    """Return (model, feature_columns) for a city; load from disk on first call."""
+    key = city.lower()                                                 # normalise case for consistent cache key lookup
+    if key not in _cache:                                              # only load when city not yet in cache
+        _cache[key] = load_artifacts(city=key)                         # populate cache entry from disk artifacts
+    return _cache[key]                                                 # return cached (model, feature_columns) tuple
 
-def predict_service(data: List[Dict]) -> List[float]:
+
+# ── Service Layer ────────────────────────────────────────────────────────────
+
+def predict_service(data: List[Dict], city: str = "seoul") -> List[float]:
     """Service-layer prediction orchestrator.
 
     Parameters:
-        data: list of input records (each a dict of features)
+        data: list of input records (each a dict of features matching Seoul schema)
+        city: lowercase city identifier — must match a trained artifact directory
+              under models/artifacts/<city>/ (default: "seoul")
 
     Returns:
-        list of predicted bike demand values (JSON-serializable floats)
+        list of predicted hourly bike demand values (JSON-serializable floats)
 
     Design purpose:
         - Decouples API layer from ML logic
-        - Centralizes prediction orchestration
-        - Hook point for future logging / monitoring / A/B testing
+        - Centralises per-city routing and lazy artifact loading
+        - Hook point for future logging, monitoring, or A/B testing
     """
-    model, feature_columns = _get_artifacts()                         # lazy-load artifacts (cached after first call)
-    predictions = predict(                                            # delegate to shared inference function
-        data=data,                                                    # input data passed through from API layer
-        model=model,                                                  # cached trained model
-        feature_columns=feature_columns,                              # cached schema for column alignment
+    model, feature_columns = _get_artifacts(city)                      # lazy-load and cache city-specific artifacts
+    predictions = predict(                                             # delegate to shared inference pipeline
+        data=data,                                                     # input records passed through from API layer
+        model=model,                                                   # cached trained model for this city
+        feature_columns=feature_columns,                               # cached schema for column alignment
     )
-    return predictions.tolist()                                       # convert numpy array to list for JSON response
+    return predictions.tolist()                                        # convert numpy array to JSON-serializable list

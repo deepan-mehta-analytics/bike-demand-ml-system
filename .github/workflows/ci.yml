@@ -31,7 +31,7 @@ jobs:
         with:
           python-version: "3.11"                 # consistent Python version across all jobs
       - run: pip install -r requirements.txt     # install all pinned project dependencies
-      - run: python -m models.train              # train model; -m adds project root to sys.path so package imports resolve
+      - run: python -m models.train --city seoul  # train Seoul model; saves artifacts to models/artifacts/seoul/
       - run: pytest tests/                       # run full test suite
 
   # ── Job 3: Docker Build ───────────────────────────────────────────────────

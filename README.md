@@ -107,11 +107,16 @@ bike-demand-ml-system/
 │
 ├── models/
 │   ├── features.py                     ← shared feature pipeline (used by train + predict)
-│   ├── train.py                        ← training pipeline + artifact persistence
-│   ├── predict.py                      ← inference pipeline + artifact loader
+│   ├── train.py                        ← training CLI: --city, --data; saves to artifacts/<city>/
+│   ├── predict.py                      ← inference pipeline: load_artifacts(city), predict()
 │   ├── __init__.py
-│   ├── random_forest_model.pkl         ← persisted model (gitignored)
-│   └── feature_columns.pkl             ← persisted feature schema (gitignored)
+│   └── artifacts/                      ← per-city artifact directories (gitignored)
+│       └── seoul/                      ← example: random_forest_model.pkl + feature_columns.pkl
+│
+├── data/
+│   ├── prepare_city_data.py            ← normalise London/NYC CSVs to Seoul schema
+│   ├── raw/                            ← place city CSVs here before training
+│   └── processed/                      ← output of prepare_city_data.py goes here
 │
 ├── services/
 │   └── predictor.py                    ← service layer: lazy singleton, decouples API from ML
@@ -195,6 +200,7 @@ The API is now live at `http://127.0.0.1:8000`. Open `http://127.0.0.1:8000/docs
 curl -X POST http://127.0.0.1:8000/predict \
   -H "Content-Type: application/json" \
   -d '{
+    "city": "Seoul",
     "data": [{
       "DATE": "01/12/2017", "HOUR": 8,
       "TEMPERATURE": -5.2, "HUMIDITY": 37,
@@ -208,6 +214,8 @@ curl -X POST http://127.0.0.1:8000/predict \
 ```
 
 Expected response: `{"predictions": [605.6]}`
+
+> **`city`** is optional — defaults to `"Seoul"` if omitted. When London and NYC models are trained, pass `"city": "London"` or `"city": "NYC"` to route to their per-city artifacts.
 
 ---
 
@@ -247,6 +255,20 @@ CI runs lint → pytest → docker build on every push to `main`.
 ---
 
 ## 📊 Model Performance
+
+### Per-City RMSE
+
+Artifacts stored at `models/artifacts/<city>/` — train each city with `python -m models.train --city <name> --data <path>`.
+
+| City | Dataset | RMSE (bikes/hr) | Status |
+|------|---------|-----------------|--------|
+| Seoul | UCI Seoul Bike Sharing (8,760 rows) | **173.21** | ✅ Trained |
+| London | Kaggle London Bike Sharing (`london_merged.csv`) | — | Pending data download |
+| NYC | BigQuery `new_york_citibike` + Open-Meteo weather | — | Pending data prep |
+
+See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL.
+
+### Seoul — Random Forest Regressor
 
 | Metric | Value |
 |---|---|
@@ -325,13 +347,17 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 2. ~~Automated tests + CI/CD via GitHub Actions~~ ✅
 3. ~~`Dockerfile` + `docker-compose.yml`~~ ✅
 
-### Phase 2 — Multi-City Training ← **next**
+### Phase 2 — Multi-City Training ✅ (infrastructure complete)
 
-- [ ] Extend `models/train.py` to accept `--city` CLI arg; persist artifacts to `models/artifacts/<city>/`
-- [ ] Update `models/predict.py` to load artifacts by city; default to `"seoul"` if not found
-- [ ] Add `city: str = "Seoul"` to `PredictRequest` Pydantic model in `api/app.py`
-- [ ] Train on London (`bigquery-public-data.london_bicycles`) and NYC (`bigquery-public-data.new_york_citibike`)
-- [ ] README: multi-city RMSE comparison table
+- [x] `models/train.py` — `--city` + `--data` CLI args; artifacts to `models/artifacts/<city>/`
+- [x] `models/predict.py` — `load_artifacts(city)` reads from `models/artifacts/<city>/`
+- [x] `services/predictor.py` — per-city lazy cache `Dict[str, tuple]`
+- [x] `api/app.py` — `city: str = "Seoul"` field on `PredictionRequest`; lowercase routing
+- [x] `data/prepare_city_data.py` — London column-map + NYC BigQuery SQL utility
+- [x] README: multi-city RMSE table (Seoul trained; London + NYC pending data download)
+- [ ] Download London data (`london_merged.csv` from Kaggle) and run `prepare_london()`
+- [ ] Build NYC joined dataset (BigQuery trips + Open-Meteo weather) and run `prepare_nyc_from_joined()`
+- [ ] Train London and NYC models; populate RMSE table
 
 ### Phase 3 — Cloud Run Deployment
 

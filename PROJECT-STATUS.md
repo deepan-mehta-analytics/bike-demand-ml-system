@@ -2,7 +2,15 @@
 
 ## Current Stage
 
-ML pipeline + service layer + FastAPI inference all live and verified end-to-end. Model retrained on the cleaned (scaler-free) pipeline; `/predict` smoke-tested with single, batch, and malformed inputs. (as of 2026-05-05)
+Foundation infrastructure complete (as of 2026-05-07). Full ML pipeline, FastAPI service, tests,
+Dockerfile, and CI are all live on `main`. Next milestone: Phase 2 — multi-city training pipeline
+(London, NYC datasets added alongside Seoul).
+
+This repo is the **Python backend** in a two-repo portfolio ecosystem:
+- **This repo** — FastAPI inference service, GCP data pipeline (Pub/Sub + Dataflow), ML training
+- **Companion repo** — R Shiny dashboard that calls `/predict` via `httr::POST`
+
+Re-entry command for new sessions: `"resume bike-demand-ml-system project"`
 
 ---
 
@@ -65,10 +73,20 @@ ML pipeline + service layer + FastAPI inference all live and verified end-to-end
   * Batch (summer 03:00): 435.64 bikes
   * Malformed input (`HOUR="not-an-int"`): HTTP 422 (Pydantic rejected)
 
-### Git & Project Structure
-* Clean modular structure (`api/`, `services/`, `models/`, `data/`)
-* `.gitignore` configured (no `.pkl`, `__pycache__/`, `venv/`, `.env` committed)
-* Cleanup pass on `main` branch — pending commit
+### Foundation Infrastructure — Phase 1 (2026-05-07)
+* `requirements.txt` — 10 packages pinned (fastapi, uvicorn[standard], scikit-learn, pandas,
+  joblib, pydantic, pytest, httpx, ruff, anyio)
+* `pytest.ini` — `pythonpath = .` so project root is on sys.path for test imports
+* `api/__init__.py` + `services/__init__.py` — make packages importable
+* `tests/conftest.py` — anyio asyncio backend fixture for `@pytest.mark.anyio`
+* `tests/test_features.py` — 9 unit tests: temporal extraction, one-hot encoding, schema alignment
+* `tests/test_api.py` — 5 integration tests via `httpx.AsyncClient`; `predict_service` mocked so
+  CI doesn't need pre-trained artifacts at import time (pytest job trains model before running tests)
+* `Dockerfile` — `python:3.11-slim`, non-root `appuser`, stdlib health check on `GET /`
+* `.dockerignore` — excludes `venv/`, `.git/`, `*.pkl`, `.claude/` from build context
+* `docker-compose.yml` — fastapi service, port 8000, `./models:/app/models` volume, `USE_PUBSUB=false`
+* `.github/workflows/ci.yml` — ruff → pytest (trains model first) → docker build
+* `README.md` — CI + Docker badges, Compose run option, Tests table, ticked Known Limitations
 
 ---
 
@@ -100,20 +118,35 @@ ML pipeline + service layer + FastAPI inference all live and verified end-to-end
 
 ## 🔜 Roadmap
 
-Synchronised with the [README Roadmap](README.md#-roadmap):
+### Phase 2 — Multi-City Training ← **next**
+* Extend `models/train.py` to accept `--city` CLI arg; persist to `models/artifacts/<city>/`
+* Update `models/predict.py` to load artifact by city name; default to `"seoul"` if not found
+* Add `city: str = "Seoul"` field to `PredictRequest` Pydantic model in `api/app.py`
+* Train on London (`bigquery-public-data.london_bicycles`) and NYC (`bigquery-public-data.new_york_citibike`)
+* README: multi-city RMSE comparison table
+* Decision at Phase 2 start: per-city artifacts (separate `.pkl`) vs unified model with city as feature
+  → **Recommended**: per-city artifacts — simpler, interpretable RMSE per city, no data leakage
 
-1. Pin dependencies (`requirements.txt`)
-2. Hyperparameter tuning (Optuna or `GridSearchCV`)
-3. Experiment tracking (MLflow run logs + model registry)
-4. Automated tests — pytest unit tests for `features.py` / `predict.py`, plus FastAPI integration tests via `httpx.AsyncClient`
-5. `Dockerfile` + `docker-compose.yml` for reproducible execution
-6. CI/CD via GitHub Actions (lint + test + container build on every push)
-7. Structured JSON logging + Prometheus metrics in the service layer
-8. API authentication (API key or OAuth2)
-9. Drift monitoring on inference inputs
+### Phase 3 — Cloud Run Deployment
+* `cloudbuild.yaml` or GH Actions step — build → push to Artifact Registry
+* `config/cloud_run.yaml` — memory 512Mi, concurrency 80, env vars
+* Shiny repo `FASTAPI_URL` env var: `http://fastapi:8000` (local) vs Cloud Run URL (GCP)
+
+### Phase 4 — Pub/Sub + Dataflow Pipeline
+* `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB` env var switches local vs GCP
+* `pipeline/dataflow_job.py` — Apache Beam: Pub/Sub → 5-min window → BigQuery / DuckDB
+* `config/gcp_config.yaml` — project ID, topic, BQ dataset, staging bucket, region
+
+### Phase 5 — Vertex AI + Experiment Tracking
+* MLflow `autolog()` in `models/train.py`; register model if RMSE improves
+* `pipeline/retrain_job.py` — BigQuery → feature engineering → retrain → log → register
+
+### Phase 6 — Observability
+* Structured JSON logging in `services/predictor.py` — city, inputs hash, prediction, latency_ms
+* `/metrics` endpoint via `prometheus-fastapi-instrumentator`
 
 ---
 
 ## 🚀 Next Step
 
-Commit the 2026-05-05 cleanup pass (5 modified files + new `services/predictor.py`, plus `.claude/` added to `.gitignore`). Then begin Roadmap item #1: pin dependencies in `requirements.txt`.
+**Phase 2 — Multi-City Training.** Resume with: `"resume bike-demand-ml-system project"`

@@ -1,7 +1,7 @@
 # 🚴 Bike Demand ML System
 
 ## ⚡ Quick Summary
-This project is a production-oriented machine learning system that forecasts hourly bike-rental demand from real-world weather and temporal signals. It separates training from inference cleanly, persists model artifacts for reproducible deployment, and exposes a FastAPI inference service backed by a service-layer architecture.
+This project is the **Python ML backend** in a two-repo portfolio system. It forecasts hourly bike-rental demand from weather and temporal signals, exposes the model through a FastAPI inference API, and is consumed by the companion [R Shiny dashboard](https://github.com/deepan-mehta-analytics/bike-demand-prediction) via `httr::POST /predict`. The architecture separates training from inference cleanly, persists model artifacts for reproducible deployment, and is containerised for local and cloud deployment.
 
 It is engineered as the next stage in a data analytics → data engineering → ML engineering trajectory: a model that ships to an API, not a notebook that ships to a screenshot.
 
@@ -11,11 +11,13 @@ It is engineered as the next stage in a data analytics → data engineering → 
 
 ## 🏷️ Project Badges
 
+[![CI](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/actions/workflows/ci.yml/badge.svg)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.x-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)](https://scikit-learn.org/)
+[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.8-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)](https://scikit-learn.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Inference_API-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![pandas](https://img.shields.io/badge/pandas-2.x-150458?style=for-the-badge&logo=pandas&logoColor=white)](https://pandas.pydata.org/)
+[![pandas](https://img.shields.io/badge/pandas-3.x-150458?style=for-the-badge&logo=pandas&logoColor=white)](https://pandas.pydata.org/)
 [![Pydantic](https://img.shields.io/badge/Pydantic-Validation-E92063?style=for-the-badge&logo=pydantic&logoColor=white)](https://docs.pydantic.dev/)
+[![Docker](https://img.shields.io/badge/Docker-Containerised-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Status](https://img.shields.io/badge/Status-In_Development-yellow?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
 
 ---
@@ -48,6 +50,9 @@ It implements:
 | API Framework | FastAPI | Inference endpoint with auto-generated OpenAPI documentation |
 | Validation | Pydantic v2 | Strict request schema validation at the API boundary |
 | ASGI Server | uvicorn | Production-grade ASGI server for FastAPI |
+| Containerisation | Docker + Docker Compose | python:3.11-slim image; models volume-mounted from host |
+| Testing | pytest + httpx + anyio | Unit tests (feature pipeline) + async integration tests (API) |
+| Linting / CI | ruff + GitHub Actions | Lint → test → docker build on every push to main |
 
 ---
 
@@ -86,7 +91,15 @@ bike-demand-ml-system/
 │
 ├── README.md
 ├── PROJECT-STATUS.md
+├── requirements.txt                    ← pinned Python dependencies
+├── Dockerfile                          ← python:3.11-slim, non-root user, health check
+├── docker-compose.yml                  ← local dev orchestration; models volume mount
+├── .dockerignore                       ← excludes venv/, .git/, *.pkl from build context
 ├── .gitignore
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml                      ← ruff lint → pytest → docker build on every push
 │
 ├── data/
 │   ├── raw/                            ← place Seoul Bike Sharing CSV here
@@ -106,6 +119,11 @@ bike-demand-ml-system/
 ├── api/
 │   └── app.py                          ← FastAPI app: /, /predict, /docs
 │
+├── tests/
+│   ├── conftest.py                     ← anyio asyncio backend fixture for async tests
+│   ├── test_features.py                ← unit tests: temporal extraction, one-hot, schema
+│   └── test_api.py                     ← integration tests: 200/422 via httpx.AsyncClient
+│
 └── venv/                               ← virtual environment (gitignored)
 ```
 
@@ -114,6 +132,8 @@ bike-demand-ml-system/
 ## ▶️ How to Run
 
 ### 📌 Option 1 — Local (Recommended for development)
+
+> Train the model first (`python models/train.py`) so the `.pkl` artefacts are on disk before starting the service.
 
 #### 1. Clone the repository
 
@@ -136,10 +156,8 @@ source venv/bin/activate
 
 #### 3. Install dependencies
 
-A `requirements.txt` is on the roadmap. For now, install directly:
-
 ```bash
-pip install fastapi uvicorn scikit-learn pandas joblib pydantic
+pip install -r requirements.txt
 ```
 
 #### 4. Place the dataset
@@ -193,9 +211,38 @@ Expected response: `{"predictions": [605.6]}`
 
 ---
 
+### 🐳 Option 2 — Docker Compose
+
+```bash
+# 1. Train model artefacts on the host first
+python models/train.py
+
+# 2. Build and start the container (artefacts are volume-mounted into /app/models)
+docker compose up --build
+
+# 3. API is live at http://localhost:8000
+```
+
+---
+
 ## 🧪 Tests
 
-No automated test suite yet — this is tracked under [Roadmap](#-roadmap). For now, the repo ships with reproducible smoke tests that exercise the full train → API → response loop (see [Smoke-Test Evidence](#-smoke-test-evidence) below).
+```bash
+# Train model artefacts first (required for full integration run)
+python models/train.py
+
+# Run the full test suite
+pytest tests/
+```
+
+The suite has two modules:
+
+| Module | Type | What it covers |
+|---|---|---|
+| `tests/test_features.py` | Unit | Temporal extraction (year/month/day/dayofweek), one-hot encoding for SEASONS and HOLIDAY, feature schema completeness |
+| `tests/test_api.py` | Integration | `httpx.AsyncClient` against the live ASGI app: 200 for single record, 200 for batch, 422 for wrong type (`HOUR="not-an-int"`), 422 for missing required field |
+
+CI runs lint → pytest → docker build on every push to `main`.
 
 ---
 
@@ -257,12 +304,12 @@ The 7× spread between summer rush and middle-of-night confirms the model captur
 
 ## ⚠️ Known Limitations
 
-- No `requirements.txt` / `pyproject.toml` yet
+- ~~No `requirements.txt` / `pyproject.toml` yet~~ — pinned in `requirements.txt` ✅
+- ~~No automated test suite (unit / integration)~~ — `tests/` with pytest + httpx ✅
+- ~~No CI/CD pipeline (GitHub Actions)~~ — lint → test → docker build on every push ✅
+- ~~No Dockerfile or containerised deployment~~ — `Dockerfile` + `docker-compose.yml` ✅
 - No hyperparameter tuning (GridSearch / Optuna)
 - No experiment tracking (MLflow / Weights & Biases)
-- No automated test suite (unit / integration)
-- No CI/CD pipeline (GitHub Actions)
-- No Dockerfile or containerised deployment
 - No request authentication or rate-limiting on the API
 - No structured logging or observability hooks
 
@@ -272,15 +319,41 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 
 ## 🔜 Roadmap
 
-1. Pin dependencies (`requirements.txt`)
-2. Hyperparameter tuning (Optuna or GridSearchCV)
-3. Experiment tracking (MLflow run logs + model registry)
-4. Automated tests — pytest unit tests for `features.py` / `predict.py`, plus FastAPI integration tests via `httpx.AsyncClient`
-5. `Dockerfile` + `docker-compose.yml` for reproducible execution
-6. CI/CD via GitHub Actions (lint + test + container build on every push)
-7. Structured JSON logging + Prometheus metrics in the service layer
-8. API authentication (API key or OAuth2)
-9. Drift monitoring on inference inputs
+### ✅ Foundation — Complete
+
+1. ~~Pin dependencies (`requirements.txt`)~~ ✅
+2. ~~Automated tests + CI/CD via GitHub Actions~~ ✅
+3. ~~`Dockerfile` + `docker-compose.yml`~~ ✅
+
+### Phase 2 — Multi-City Training ← **next**
+
+- [ ] Extend `models/train.py` to accept `--city` CLI arg; persist artifacts to `models/artifacts/<city>/`
+- [ ] Update `models/predict.py` to load artifacts by city; default to `"seoul"` if not found
+- [ ] Add `city: str = "Seoul"` to `PredictRequest` Pydantic model in `api/app.py`
+- [ ] Train on London (`bigquery-public-data.london_bicycles`) and NYC (`bigquery-public-data.new_york_citibike`)
+- [ ] README: multi-city RMSE comparison table
+
+### Phase 3 — Cloud Run Deployment
+
+- [ ] `cloudbuild.yaml` or GH Actions step — build → push to Artifact Registry → deploy to Cloud Run
+- [ ] `config/cloud_run.yaml` — memory 512Mi, concurrency 80, env vars
+- [ ] Update companion Shiny repo `FASTAPI_URL` env var to point at Cloud Run URL
+
+### Phase 4 — Pub/Sub + Dataflow Pipeline
+
+- [ ] `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB=false` runs locally
+- [ ] `pipeline/dataflow_job.py` — Apache Beam: Pub/Sub → 5-min window → BigQuery / DuckDB
+- [ ] `config/gcp_config.yaml` — project ID, topic, BQ dataset, staging bucket, region
+
+### Phase 5 — Vertex AI + Experiment Tracking
+
+- [ ] MLflow `autolog()` in `models/train.py`; register model if RMSE improves
+- [ ] `pipeline/retrain_job.py` — BigQuery → feature engineering → retrain → log → register
+
+### Phase 6 — Observability
+
+- [ ] Structured JSON logging in `services/predictor.py` — city, inputs hash, prediction, latency_ms
+- [ ] `/metrics` endpoint via `prometheus-fastapi-instrumentator`
 
 ---
 

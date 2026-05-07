@@ -35,6 +35,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import glob                                                            # file pattern matching for CSV discovery
 import requests                                                        # HTTP client for Open-Meteo API
 import pandas as pd                                                    # DataFrame for all tabular operations
+from data.prepare_city_data import prepare_dc_from_joined  # noqa: E402  # Seoul-schema normaliser; after sys.path bootstrap
 
 
 # ── Step 1 — Aggregate Capital Bikeshare Trips to Hourly ──────────────────────
@@ -151,8 +152,6 @@ print(f"\nJoined: {len(joined):,} rows -> {JOINED_OUT}")              # confirm 
 FINAL_OUT = "data/processed/dc_bike_sharing.csv"                       # final training-ready output
 
 os.makedirs("data/processed", exist_ok=True)                           # ensure processed directory exists
-
-from data.prepare_city_data import prepare_dc_from_joined              # import Seoul-schema normaliser for DC
 
 df_out = prepare_dc_from_joined(JOINED_OUT)                            # map joined CSV to 14-column Seoul schema
 df_out.to_csv(FINAL_OUT, index=False)                                  # write final CSV to disk

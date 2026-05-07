@@ -260,11 +260,13 @@ CI runs lint → pytest → docker build on every push to `main`.
 
 Artifacts stored at `models/artifacts/<city>/` — train each city with `python -m models.train --city <name> --data <path>`.
 
-| City | Dataset | RMSE (bikes/hr) | Status |
-|------|---------|-----------------|--------|
-| Seoul | UCI Seoul Bike Sharing (8,760 rows) | **173.21** | ✅ Trained |
-| London | Kaggle London Bike Sharing (`london_merged.csv`) | — | Pending data download |
-| NYC | BigQuery `new_york_citibike` + Open-Meteo weather | — | Pending data prep |
+| City | Dataset | Rows | RMSE (bikes/hr) | Top Feature | Status |
+|------|---------|------|-----------------|-------------|--------|
+| Seoul | UCI Seoul Bike Sharing | 8,760 | **173.21** | TEMPERATURE (0.34) | ✅ Trained |
+| London | Kaggle London Bike Sharing | 17,414 | **228.58** | HOUR (0.71) | ✅ Trained |
+| NYC | BigQuery `new_york_citibike` + Open-Meteo | — | — | — | Pending data prep |
+
+London's model is dominated by HOUR (0.71 importance vs 0.30 for Seoul), reflecting London's strong commuter cycling pattern. Missing columns (VISIBILITY, DEW_POINT_TEMPERATURE, SOLAR_RADIATION) were zeroed — sourcing these would likely reduce RMSE further.
 
 See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL.
 
@@ -355,9 +357,10 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 - [x] `api/app.py` — `city: str = "Seoul"` field on `PredictionRequest`; lowercase routing
 - [x] `data/prepare_city_data.py` — London column-map + NYC BigQuery SQL utility
 - [x] README: multi-city RMSE table (Seoul trained; London + NYC pending data download)
-- [ ] Download London data (`london_merged.csv` from Kaggle) and run `prepare_london()`
+- [x] Download London data (`london_merged.csv` from Kaggle) → `prepare_london()` → `data/processed/london_bike_sharing.csv`
+- [x] Train London model — RMSE 228.58 bikes/hr; artifacts at `models/artifacts/london/`
 - [ ] Build NYC joined dataset (BigQuery trips + Open-Meteo weather) and run `prepare_nyc_from_joined()`
-- [ ] Train London and NYC models; populate RMSE table
+- [ ] Train NYC model; populate RMSE table entry
 
 ### Phase 3 — Cloud Run Deployment
 

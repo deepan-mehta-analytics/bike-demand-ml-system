@@ -102,8 +102,10 @@ bike-demand-ml-system/
 │       └── ci.yml                      ← ruff lint → pytest → docker build on every push
 │
 ├── data/
-│   ├── raw/                            ← place Seoul Bike Sharing CSV here
-│   └── processed/                      ← reserved for processed outputs
+│   ├── prepare_city_data.py            ← normalise London/NYC CSVs to Seoul schema
+│   ├── fetch_nyc_weather.py            ← Open-Meteo historical fetch + join for NYC
+│   ├── raw/                            ← place city CSVs here before training
+│   └── processed/                      ← output of prepare_city_data.py goes here
 │
 ├── models/
 │   ├── features.py                     ← shared feature pipeline (used by train + predict)
@@ -111,12 +113,9 @@ bike-demand-ml-system/
 │   ├── predict.py                      ← inference pipeline: load_artifacts(city), predict()
 │   ├── __init__.py
 │   └── artifacts/                      ← per-city artifact directories (gitignored)
-│       └── seoul/                      ← example: random_forest_model.pkl + feature_columns.pkl
-│
-├── data/
-│   ├── prepare_city_data.py            ← normalise London/NYC CSVs to Seoul schema
-│   ├── raw/                            ← place city CSVs here before training
-│   └── processed/                      ← output of prepare_city_data.py goes here
+│       ├── seoul/                      ← random_forest_model.pkl + feature_columns.pkl
+│       ├── london/                     ← random_forest_model.pkl + feature_columns.pkl
+│       └── nyc/                        ← random_forest_model.pkl + feature_columns.pkl
 │
 ├── services/
 │   └── predictor.py                    ← service layer: lazy singleton, decouples API from ML
@@ -181,8 +180,8 @@ python -m models.train
 
 This produces:
 
-- `models/random_forest_model.pkl`
-- `models/feature_columns.pkl`
+- `models/artifacts/seoul/random_forest_model.pkl`
+- `models/artifacts/seoul/feature_columns.pkl`
 
 …and prints RMSE plus the top-10 feature importances to stdout.
 
@@ -215,7 +214,7 @@ curl -X POST http://127.0.0.1:8000/predict \
 
 Expected response: `{"predictions": [605.6]}`
 
-> **`city`** is optional — defaults to `"Seoul"` if omitted. When London and NYC models are trained, pass `"city": "London"` or `"city": "NYC"` to route to their per-city artifacts.
+> **`city`** is optional — defaults to `"Seoul"` if omitted. Pass `"city": "London"` or `"city": "nyc"` to route to their per-city artifacts. Cities without a trained model (Paris, Chicago) fall back to Seoul.
 
 ---
 
@@ -389,8 +388,8 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 - [x] README: multi-city RMSE table (Seoul trained; London + NYC pending data download)
 - [x] Download London data (`london_merged.csv` from Kaggle) → `prepare_london()` → `data/processed/london_bike_sharing.csv`
 - [x] Train London model — RMSE 228.58 bikes/hr; artifacts at `models/artifacts/london/`
-- [ ] Build NYC joined dataset (BigQuery trips + Open-Meteo weather) and run `prepare_nyc_from_joined()`
-- [ ] Train NYC model; populate RMSE table entry
+- [x] Build NYC joined dataset (BigQuery trips + Open-Meteo weather) and run `prepare_nyc_from_joined()`
+- [x] Train NYC model; populate RMSE table entry
 
 ### Phase 3 — Cloud Run Deployment
 

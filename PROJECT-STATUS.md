@@ -11,8 +11,8 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 2 Multi-City | ✅ Complete | `7985cf3` |
-| **bike_demand_prediction** | R Shiny dashboard | Phase 7H Containerisation + city routing | ✅ Complete | `dc9404b` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 2 Multi-City + CI fixes | ✅ Complete | `1ae284f` |
+| **bike_demand_prediction** | R Shiny dashboard | Phase 7H Containerisation + city routing | ✅ Complete | `b39cede` |
 
 ### Trained City Models
 
@@ -55,9 +55,9 @@ Both repos form a single portfolio system. Track them together here.
 ### Infrastructure (containerisation + CI)
 * `requirements.txt` — 10 packages pinned; `pytest.ini` — `pythonpath = .`
 * 15 tests: 9 unit (feature engineering) + 5 integration (API) + 1 city default test
-* `Dockerfile` — `python:3.11-slim`, non-root `appuser`, stdlib health check
+* `Dockerfile` — `python:3.11-slim`, non-root `appuser`, stdlib health check; inline comments moved to standalone lines (Docker parse fix, commit `1ae284f`)
 * `docker-compose.yml` — fastapi service, port 8000, `./models:/app/models` volume, `USE_PUBSUB=false`
-* `.github/workflows/ci.yml` — ruff lint → pytest (trains Seoul model) → docker build
+* `.github/workflows/ci.yml` — ruff lint → pytest (trains Seoul model) → docker build; all 3 jobs green
 
 ---
 

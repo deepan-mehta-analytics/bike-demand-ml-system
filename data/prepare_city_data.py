@@ -112,6 +112,64 @@ def prepare_london(path: str) -> pd.DataFrame:
     return df[seoul_cols].reset_index(drop=True)                       # return only schema columns; reset index
 
 
+# ── Washington DC (Capital Bikeshare) ────────────────────────────────────────
+
+def prepare_dc_from_joined(path: str) -> pd.DataFrame:
+    """Normalise a pre-joined DC trips + weather CSV to Seoul schema.
+
+    Expected input columns (produced by data/fetch_dc_weather.py):
+        DATE               — DD/MM/YYYY string
+        HOUR               — integer 0-23
+        RENTED_BIKE_COUNT  — integer hourly trip count aggregated from Capital Bikeshare CSVs
+        temperature_2m     — Celsius (Open-Meteo column name)
+        relative_humidity_2m — percent
+        wind_speed_10m     — m/s (Open-Meteo already outputs m/s when wind_speed_unit=ms)
+        precipitation      — mm
+        snowfall           — cm
+        visibility         — metres (divide by 10 for Seoul units)
+        dew_point_2m       — Celsius
+
+    Parameters:
+        path: local path to the joined CSV (data/raw/dc_joined.csv)
+
+    Returns:
+        DataFrame in Seoul schema ready to pass to models/train.py
+    """
+    df = pd.read_csv(path)                                             # load pre-joined trips + weather CSV
+
+    # ── Weather Features ─────────────────────────────────────────────────────
+    df["TEMPERATURE"] = df["temperature_2m"].astype(float)             # rename Open-Meteo column to Seoul name
+    df["HUMIDITY"] = df["relative_humidity_2m"].round().astype(int)    # round to nearest integer percent
+    df["WIND_SPEED"] = df["wind_speed_10m"].astype(float)              # Open-Meteo wind speed already in m/s
+    df["VISIBILITY"] = (df["visibility"] / 10).round().fillna(0).astype(int)  # metres to 10m units; 0 = not available
+    df["DEW_POINT_TEMPERATURE"] = df["dew_point_2m"].astype(float)     # rename Open-Meteo column
+    df["SOLAR_RADIATION"] = 0.0                                        # not available from Open-Meteo free tier
+    df["RAINFALL"] = df["precipitation"].astype(float)                 # rename precipitation to RAINFALL
+    df["SNOWFALL"] = df["snowfall"].astype(float)                      # rename snowfall column
+
+    # ── Derived Categoricals ─────────────────────────────────────────────────
+    date_dt = pd.to_datetime(df["DATE"], dayfirst=True)                # parse DD/MM/YYYY for month-based season derivation
+    month = date_dt.dt.month                                           # extract month number for season lookup
+    df["SEASONS"] = pd.cut(                                            # derive season from month-of-year
+        month,
+        bins=[0, 2, 5, 8, 11, 12],                                    # 1-2=Winter, 3-5=Spring, 6-8=Summer, 9-11=Autumn
+        labels=["Winter", "Spring", "Summer", "Autumn", "Winter"],     # season label per bin
+        ordered=False,
+    ).astype(str)                                                      # convert Categorical to plain strings
+    df["HOLIDAY"] = "No Holiday"                                       # DC public holidays not in trip data; default
+    df["FUNCTIONING_DAY"] = "Yes"                                      # Capital Bikeshare operates year-round
+
+    # ── Select and Return Seoul Schema Columns ────────────────────────────────
+    seoul_cols = [                                                     # Seoul schema column order
+        "DATE", "HOUR", "TEMPERATURE", "HUMIDITY", "WIND_SPEED",
+        "VISIBILITY", "DEW_POINT_TEMPERATURE", "SOLAR_RADIATION",
+        "RAINFALL", "SNOWFALL",
+        "SEASONS", "HOLIDAY", "FUNCTIONING_DAY",
+        "RENTED_BIKE_COUNT",
+    ]
+    return df[seoul_cols].reset_index(drop=True)                       # return schema-aligned DataFrame
+
+
 # ── NYC (BigQuery) ───────────────────────────────────────────────────────────
 
 def nyc_bigquery_sql() -> str:

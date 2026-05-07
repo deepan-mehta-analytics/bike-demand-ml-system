@@ -19,6 +19,21 @@ logger = logging.getLogger(__name__)                                   # module-
 _cache: Dict[str, tuple] = {}                                          # keyed by lowercase city name -> (model, schema)
 _FALLBACK_CITY = "seoul"                                               # default city when requested city has no artifacts
 
+# Maps display-name slugs sent by clients to the artifact directory key.
+# R Shiny sends tolower(CITY_ASCII), which may not match the training --city flag.
+# E.g. "new york" -> artifact at models/artifacts/nyc/
+#      "washington dc" -> artifact at models/artifacts/dc/
+_CITY_SLUG_MAP: Dict[str, str] = {
+    "new york":      "nyc",   # Citi Bike; matches --city nyc training flag
+    "washington dc": "dc",    # Capital Bikeshare; matches --city dc training flag
+}
+
+
+def _resolve_city_key(city: str) -> str:
+    """Normalise a raw city string to the artifact directory key."""
+    raw = city.lower().strip()                                         # lowercase + strip whitespace
+    return _CITY_SLUG_MAP.get(raw, raw)                               # apply slug map; return as-is if not in map
+
 
 def _artifact_dir_exists(city: str) -> bool:
     """Return True if models/artifacts/<city>/ contains at least one .pkl file."""
@@ -31,7 +46,7 @@ def _get_artifacts(city: str) -> tuple:
 
     Falls back to Seoul artifacts if no trained model exists for the requested city.
     """
-    key = city.lower()                                                 # normalise case for consistent cache key lookup
+    key = _resolve_city_key(city)                                      # normalise: lowercase + apply slug map (e.g. "new york" -> "nyc")
     if key not in _cache:                                              # only load when city not yet in cache
         if not _artifact_dir_exists(key):                              # check whether trained artifacts exist on disk
             logger.warning(                                            # warn; do not raise so the API keeps serving

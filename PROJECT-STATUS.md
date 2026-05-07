@@ -11,8 +11,8 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 2 Multi-City + CI fixes | ✅ Complete | `1ae284f` |
-| **bike_demand_prediction** | R Shiny dashboard | Phase 7H Containerisation + city routing | ✅ Complete | `b39cede` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 2 + DC city addition | 🔄 In Progress | `cbe1c00` |
+| **bike_demand_prediction** | R Shiny dashboard | Phase 7H + DC city addition | 🔄 In Progress | `e837b8e` |
 
 ### Trained City Models
 
@@ -21,6 +21,7 @@ Both repos form a single portfolio system. Track them together here.
 | Seoul | UCI Seoul Bike Sharing | 8,760 | **173.21** | TEMPERATURE (0.34) | `models/artifacts/seoul/` |
 | London | Kaggle london_merged.csv | 17,414 | **228.58** | HOUR (0.71) | `models/artifacts/london/` |
 | NYC | BigQuery citibike_trips (2014–2018) + Open-Meteo | 34,187 | **345.69** | HOUR (0.52) | `models/artifacts/nyc/` |
+| Washington DC | Capital Bikeshare CSVs (2014–2018) + Open-Meteo | — | **pending** | — | `models/artifacts/dc/` 🔲 |
 
 ### Next Milestones (Both Repos)
 
@@ -49,8 +50,9 @@ Both repos form a single portfolio system. Track them together here.
 * `city: str = "Seoul"` field on `PredictionRequest`; service layer routes to correct artifact
 * **London**: Kaggle CSV prepared via `prepare_london()`; RMSE **228.58**; HOUR dominates (0.71)
 * **NYC**: BigQuery `new_york_citibike` (2014–2018) + Open-Meteo via `data/fetch_nyc_weather.py`; RMSE **345.69**; HOUR (0.52) + year growth trend (0.12)
-* `services/predictor.py`: fallback to Seoul for cities without trained artifacts (Paris, Chicago)
-* `data/prepare_city_data.py`: `prepare_london()`, `nyc_bigquery_sql()`, `prepare_nyc_from_joined()`
+* `services/predictor.py`: fallback to Seoul for cities without trained artifacts; city slug map routes "new york" → nyc, "washington dc" → dc
+* `data/prepare_city_data.py`: `prepare_london()`, `nyc_bigquery_sql()`, `prepare_nyc_from_joined()`, `prepare_dc_from_joined()`
+* `data/fetch_dc_weather.py`: Capital Bikeshare trip aggregation + Open-Meteo join + Seoul-schema prepare for DC
 
 ### Infrastructure (containerisation + CI)
 * `requirements.txt` — 10 packages pinned; `pytest.ini` — `pythonpath = .`

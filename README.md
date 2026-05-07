@@ -264,6 +264,7 @@ Artifacts stored at `models/artifacts/<city>/` — train each city with `python 
 | Seoul | UCI Seoul Bike Sharing | 8,760 | **173.21** | TEMPERATURE (0.34) | ✅ Trained |
 | London | Kaggle London Bike Sharing | 17,414 | **228.58** | HOUR (0.71) | ✅ Trained |
 | NYC | BigQuery `new_york_citibike` + Open-Meteo | 34,187 | **345.69** | HOUR (0.52) | ✅ Trained |
+| Washington DC | Capital Bikeshare CSVs + Open-Meteo | — | — | — | 🔲 Pending data |
 
 NYC is the most hour-driven of the three cities — HOUR alone accounts for 52% of feature importance, reflecting New York's dense commuter cycling pattern. Higher RMSE vs Seoul/London reflects NYC's larger absolute trip volumes (hundreds per hour vs tens).
 
@@ -390,6 +391,11 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 - [x] Train London model — RMSE 228.58 bikes/hr; artifacts at `models/artifacts/london/`
 - [x] Build NYC joined dataset (BigQuery trips + Open-Meteo weather) and run `prepare_nyc_from_joined()`
 - [x] Train NYC model; populate RMSE table entry
+- [x] Add `prepare_dc_from_joined()` + `data/fetch_dc_weather.py` for Capital Bikeshare
+- [x] City slug map in `services/predictor.py` — fixes "new york" → nyc routing + adds "washington dc" → dc
+- [ ] Download Capital Bikeshare CSVs (2014–2018) → `data/raw/dc_trips/` and run `python data/fetch_dc_weather.py`
+- [ ] Train DC model — `python -m models.train --city dc --data data/processed/dc_bike_sharing.csv`
+- [ ] Populate Washington DC RMSE table entry
 
 ### Phase 3 — Cloud Run Deployment
 

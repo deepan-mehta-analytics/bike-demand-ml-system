@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 2 complete — 4 cities trained | ✅ Done | `b359253` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 2 complete — 4 cities trained | ✅ Done | `9bdf170` |
 | **bike_demand_prediction** | R Shiny dashboard | Phase 7H complete — 6 cities | ✅ Done | `c5e9c11` |
 
 ### Trained City Models

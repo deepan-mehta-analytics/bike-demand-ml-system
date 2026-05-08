@@ -11,8 +11,8 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 2 complete — 4 cities trained | ✅ Done | `9bdf170` |
-| **bike_demand_prediction** | R Shiny dashboard | Phase 7H complete — 6 cities | ✅ Done | `c5e9c11` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 3 in progress — GHCR publish wired; Cloud Run pending | 🔄 In Progress | `0d9f73a` |
+| **bike_demand_prediction** | R Shiny dashboard | Phase 7H complete — 6 cities; v1.0.0 released | ✅ Done | `432335d` |
 
 ### Trained City Models
 
@@ -60,8 +60,8 @@ Both repos form a single portfolio system. Track them together here.
 * `requirements.txt` — 10 packages pinned; `pytest.ini` — `pythonpath = .`
 * 15 tests: 9 unit (feature engineering) + 5 integration (API) + 1 city default test
 * `Dockerfile` — `python:3.11-slim`, non-root `appuser`, stdlib health check; inline comments moved to standalone lines (Docker parse fix, commit `1ae284f`)
-* `docker-compose.yml` — fastapi service, port 8000, `./models:/app/models` volume, `USE_PUBSUB=false`
-* `.github/workflows/ci.yml` — ruff lint → pytest (trains Seoul model) → docker build; all 3 jobs green
+* `docker-compose.yml` — fastapi service, port 8000, `USE_PUBSUB=false`; volume mount removed (artifacts baked into image)
+* `.github/workflows/ci.yml` — ruff lint → pytest (trains Seoul model) → docker build → push to GHCR; all 4 jobs green on push to main
 
 ---
 
@@ -80,11 +80,14 @@ Both repos form a single portfolio system. Track them together here.
 
 ## 🔜 Roadmap
 
-### Phase 3 — Cloud Run Deployment ← **next**
-* GH Actions step: build image → push to Artifact Registry → deploy to Cloud Run
-* `config/cloud_run.yaml` — memory 512Mi, concurrency 80, env vars for city artifact paths
-* R Shiny `FASTAPI_URL` switches from `http://fastapi:8000` (local) → Cloud Run URL (GCP)
-* Pre-requisite for R Shiny Phase 7F (streaming pipeline needs a stable FastAPI endpoint)
+### Phase 3 — Cloud Run Deployment 🔄 IN PROGRESS
+* [x] All 4 city models baked into Docker image at build time — no volume mount required
+* [x] `docker-compose.yml` — volume section removed; image is self-contained
+* [x] CI publish job — `docker/build-push-action` pushes `ghcr.io/deepan-mehta-analytics/bike-demand-ml-system:{latest,sha}` to GHCR on merge to main; uses auto-injected `GITHUB_TOKEN` (no manual secrets required)
+* [x] README — Option 3 (GHCR pull) + Option 4 (Cloud Run gcloud deploy) documented
+* [x] GitHub release `v1.0.0` published on both repos (2026-05-08)
+* [ ] Run `gcloud run deploy` to get live Cloud Run URL (pending GCP access)
+* [ ] Update Shiny repo `model_prediction.R` `FASTAPI_URL` with Cloud Run URL
 
 ### Phase 4 — Pub/Sub + Dataflow Pipeline
 * `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB=false` for local mode
@@ -104,4 +107,4 @@ Both repos form a single portfolio system. Track them together here.
 
 ## 🚀 Next Step
 
-**Phase 3 — Cloud Run Deployment.** Resume with: `"resume bike-demand-ml-system project"`
+**Phase 3 — Cloud Run Deployment (in progress).** Run `gcloud run deploy` once GCP access is available to get the live Cloud Run URL, then update Shiny repo `FASTAPI_URL`. Resume with: `"resume bike-demand-ml-system — check workflow_status.md and pick up from the next pending action"`

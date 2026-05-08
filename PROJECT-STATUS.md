@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 3 in progress — GHCR publish wired; Cloud Run pending | 🔄 In Progress | `ce43e8a` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 3 in progress — GHCR publish wired; Cloud Run pending | 🔄 In Progress | `ec5b339` |
 | **bike_demand_prediction** | R Shiny dashboard | Phase 7H complete — 6 cities; v1.0.0 released | ✅ Done | `432335d` |
 
 ### Trained City Models
@@ -86,6 +86,7 @@ Both repos form a single portfolio system. Track them together here.
 * [x] CI publish job — `docker/build-push-action` pushes `ghcr.io/deepan-mehta-analytics/bike-demand-ml-system:{latest,sha}` to GHCR on merge to main; uses auto-injected `GITHUB_TOKEN` (no manual secrets required)
 * [x] README — Option 3 (GHCR pull) + Option 4 (Cloud Run gcloud deploy) documented
 * [x] GitHub release `v1.0.0` published on both repos (2026-05-08)
+* [x] NotebookLM PKB audit complete — 5 documents in `notebooklm/` (gitignored)
 * [ ] Run `gcloud run deploy` to get live Cloud Run URL (pending GCP access)
 * [ ] Update Shiny repo `model_prediction.R` `FASTAPI_URL` with Cloud Run URL
 

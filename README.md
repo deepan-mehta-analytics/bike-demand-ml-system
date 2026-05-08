@@ -238,13 +238,13 @@ docker compose up --build
 
 ---
 
-### 📦 Option 3 — Pull from Docker Hub
+### 📦 Option 3 — Pull from GitHub Container Registry
 
-Pre-built image with all four city models baked in. No local build required.
+Pre-built image with all four city models baked in. Published automatically on every merge to `main` via GitHub Actions — no manual build required.
 
 ```bash
-docker pull supernovasurfersolutions/bike-demand-ml-system:latest
-docker run -p 8000:8000 supernovasurfersolutions/bike-demand-ml-system:latest
+docker pull ghcr.io/deepan-mehta-analytics/bike-demand-ml-system:latest
+docker run -p 8000:8000 ghcr.io/deepan-mehta-analytics/bike-demand-ml-system:latest
 ```
 
 API is live at `http://localhost:8000`. Open `http://localhost:8000/docs` for the Swagger UI.
@@ -253,11 +253,11 @@ API is live at `http://localhost:8000`. Open `http://localhost:8000/docs` for th
 
 ### ☁️ Option 4 — Cloud Run (GCP)
 
-Deploy the Docker Hub image to Google Cloud Run. Requires the `gcloud` CLI authenticated to a GCP project with Cloud Run enabled.
+Deploy the GHCR image to Google Cloud Run. Requires the `gcloud` CLI authenticated to a GCP project with Cloud Run enabled.
 
 ```bash
 gcloud run deploy bike-demand-api \
-  --image docker.io/supernovasurfersolutions/bike-demand-ml-system:latest \
+  --image ghcr.io/deepan-mehta-analytics/bike-demand-ml-system:latest \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \
@@ -468,7 +468,7 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 
 - [x] Bake all 4 city model artifacts into Docker image at build time (no runtime volume mount)
 - [x] `docker-compose.yml` — removed volume mount; image is self-contained
-- [x] GitHub Actions publish job — builds and pushes `supernovasurfersolutions/bike-demand-ml-system` to Docker Hub on merge to main
+- [x] GitHub Actions publish job — builds and pushes to GHCR (`ghcr.io/deepan-mehta-analytics/bike-demand-ml-system`) on merge to main; uses `GITHUB_TOKEN`, no manual secrets required
 - [x] Cloud Run deployment command documented in README (Option 4)
 - [ ] Add `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` secrets to GitHub repo settings
 - [ ] Run `gcloud run deploy` to get live Cloud Run URL

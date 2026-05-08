@@ -12,3 +12,7 @@ models/artifacts/**
 .vscode/
 # Claude Code project-local settings (per-developer, not committed)
 .claude/
+# NotebookLM PKB sources — local study materials, not for version control
+notebooklm/
+# Raw Capital Bikeshare quarterly CSVs — large files, regenerate via fetch_dc_weather.py
+data/raw/dc/trips/

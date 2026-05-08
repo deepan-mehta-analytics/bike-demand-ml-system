@@ -2,15 +2,13 @@ version: "3.9"                                               # Compose file form
 
 services:
 
-  # ── FastAPI Prediction Service ─────────────────────────────────────────
+  # FastAPI Prediction Service
   fastapi:                                                   # service name referenced by dependent stacks
     build:
-      context: .                                             # build from project root (Shiny compose uses build.context: ../bike-demand-ml-system)
+      context: .                                             # build from project root
       dockerfile: Dockerfile                                 # explicit Dockerfile path
     ports:
       - "8000:8000"                                          # expose API on host port 8000
-    volumes:
-      - ./models:/app/models                                 # mount pre-trained .pkl artefacts at runtime (gitignored, not baked in)
     environment:
       - USE_PUBSUB=false                                     # disable Pub/Sub integration in local dev
     healthcheck:

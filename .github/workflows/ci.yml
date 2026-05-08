@@ -8,7 +8,7 @@ on:
 
 jobs:
 
-  # ── Job 1: Lint ──────────────────────────────────────────────────────────
+  # Job 1: Lint
   lint:
     name: Ruff lint
     runs-on: ubuntu-latest                       # standard GitHub-hosted runner
@@ -20,7 +20,7 @@ jobs:
       - run: pip install ruff==0.15.12           # install pinned linter only — no full requirements needed
       - run: ruff check .                        # lint all Python files (respects .gitignore; skips venv/)
 
-  # ── Job 2: Test ───────────────────────────────────────────────────────────
+  # Job 2: Test
   test:
     name: pytest
     runs-on: ubuntu-latest                       # standard runner
@@ -34,11 +34,33 @@ jobs:
       - run: python -m models.train --city seoul  # train Seoul model; saves artifacts to models/artifacts/seoul/
       - run: pytest tests/                       # run full test suite
 
-  # ── Job 3: Docker Build ───────────────────────────────────────────────────
+  # Job 3: Docker Build
   docker:
     name: Docker build
     runs-on: ubuntu-latest                       # standard runner
     needs: test                                  # only build image if tests pass
     steps:
       - uses: actions/checkout@v4                # check out source
-      - run: docker build -t bike-demand-ml-system:ci .  # build image; non-zero exit fails the job
+      - run: docker build -t bike-demand-ml-system:ci .  # build image; trains all 4 city models during build
+
+  # Job 4: Publish to Docker Hub
+  # runs only on push to main (not on pull requests)
+  # requires DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets in repo settings
+  publish:
+    name: Push to Docker Hub
+    runs-on: ubuntu-latest                       # standard runner
+    needs: docker                                # only publish if docker build passes
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4                # check out source
+      - uses: docker/login-action@v3             # authenticate with Docker Hub
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v5        # build and push in a single step
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/bike-demand-ml-system:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/bike-demand-ml-system:${{ github.sha }}

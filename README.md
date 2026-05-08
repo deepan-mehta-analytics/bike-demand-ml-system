@@ -227,15 +227,46 @@ Expected response: `{"predictions": [605.6]}`
 
 ### 🐳 Option 2 — Docker Compose
 
-```bash
-# 1. Train model artefacts on the host first
-python models/train.py
+Model artifacts are baked into the image at build time — no local training step required.
 
-# 2. Build and start the container (artefacts are volume-mounted into /app/models)
+```bash
+# Build the image (trains all 4 city models during build) and start the container
 docker compose up --build
 
-# 3. API is live at http://localhost:8000
+# API is live at http://localhost:8000
 ```
+
+---
+
+### 📦 Option 3 — Pull from Docker Hub
+
+Pre-built image with all four city models baked in. No local build required.
+
+```bash
+docker pull supernovasurfersolutions/bike-demand-ml-system:latest
+docker run -p 8000:8000 supernovasurfersolutions/bike-demand-ml-system:latest
+```
+
+API is live at `http://localhost:8000`. Open `http://localhost:8000/docs` for the Swagger UI.
+
+---
+
+### ☁️ Option 4 — Cloud Run (GCP)
+
+Deploy the Docker Hub image to Google Cloud Run. Requires the `gcloud` CLI authenticated to a GCP project with Cloud Run enabled.
+
+```bash
+gcloud run deploy bike-demand-api \
+  --image docker.io/supernovasurfersolutions/bike-demand-ml-system:latest \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --memory 512Mi \
+  --concurrency 80 \
+  --port 8000
+```
+
+Cloud Run returns a service URL on first deploy. Use that URL as `FASTAPI_URL` in the companion R Shiny dashboard.
 
 ---
 
@@ -256,7 +287,7 @@ The suite has two modules:
 | `tests/test_features.py` | Unit | Temporal extraction (year/month/day/dayofweek), one-hot encoding for SEASONS and HOLIDAY, feature schema completeness |
 | `tests/test_api.py` | Integration | `httpx.AsyncClient` against the live ASGI app: 200 for single record, 200 for batch, 422 for wrong type (`HOUR="not-an-int"`), 422 for missing required field |
 
-CI runs lint → pytest → docker build on every push to `main`.
+CI runs lint → pytest → docker build → push to Docker Hub on every push to `main`.
 
 ---
 
@@ -433,11 +464,15 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 - [x] Train DC model — RMSE **97.47** bikes/hr; artifacts at `models/artifacts/dc/`
 - [x] Populate Washington DC RMSE table entry
 
-### Phase 3 — Cloud Run Deployment
+### Phase 3 — Cloud Run Deployment 🔄 In Progress
 
-- [ ] `cloudbuild.yaml` or GH Actions step — build → push to Artifact Registry → deploy to Cloud Run
-- [ ] `config/cloud_run.yaml` — memory 512Mi, concurrency 80, env vars
-- [ ] Update companion Shiny repo `FASTAPI_URL` env var to point at Cloud Run URL
+- [x] Bake all 4 city model artifacts into Docker image at build time (no runtime volume mount)
+- [x] `docker-compose.yml` — removed volume mount; image is self-contained
+- [x] GitHub Actions publish job — builds and pushes `supernovasurfersolutions/bike-demand-ml-system` to Docker Hub on merge to main
+- [x] Cloud Run deployment command documented in README (Option 4)
+- [ ] Add `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` secrets to GitHub repo settings
+- [ ] Run `gcloud run deploy` to get live Cloud Run URL
+- [ ] Update companion Shiny repo `FASTAPI_URL` to point at Cloud Run URL
 
 ### Phase 4 — Pub/Sub + Dataflow Pipeline
 

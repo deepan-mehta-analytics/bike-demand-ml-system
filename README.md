@@ -478,21 +478,22 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 - [x] Health check confirmed: `{"message":"Bike Demand Prediction API is running"}`
 - [x] Companion Shiny repo `model_prediction.R` updated with Cloud Run URL in `FASTAPI_URL` comment
 
-### Phase 4 — Pub/Sub + Dataflow Pipeline
+### Phase 6 — Observability ← **Priority 1 (v2.1.0 — start here)**
+
+- [ ] Structured JSON logging in `services/predictor.py` — city, inputs hash, prediction, latency_ms
+- [ ] `/metrics` endpoint via `prometheus-fastapi-instrumentator`
+
+### Phase 4 — Pub/Sub + Dataflow Pipeline ← **Priority 2 (v3.0.0)**
 
 - [ ] `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB=false` runs locally
 - [ ] `pipeline/dataflow_job.py` — Apache Beam: Pub/Sub → 5-min window → BigQuery / DuckDB
 - [ ] `config/gcp_config.yaml` — project ID, topic, BQ dataset, staging bucket, region
+- Unlocks companion Shiny repo Phase 7F (v1.2.0)
 
-### Phase 5 — Vertex AI + Experiment Tracking
+### Phase 5 — Vertex AI + Experiment Tracking ← **Priority 4 (v4.0.0 — after streaming)**
 
 - [ ] MLflow `autolog()` in `models/train.py`; register model if RMSE improves
 - [ ] `pipeline/retrain_job.py` — BigQuery → feature engineering → retrain → log → register
-
-### Phase 6 — Observability
-
-- [ ] Structured JSON logging in `services/predictor.py` — city, inputs hash, prediction, latency_ms
-- [ ] `/metrics` endpoint via `prometheus-fastapi-instrumentator`
 
 ---
 

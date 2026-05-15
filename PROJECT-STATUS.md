@@ -11,8 +11,8 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 3 complete — Cloud Run live at https://bike-demand-api-246440913351.us-central1.run.app | ✅ Done | `6f8f7eb` |
-| **bike_demand_prediction** | R Shiny dashboard | Phase 7H complete — 6 cities; v1.0.0 released | ✅ Done | `95686f5` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 3 complete — Cloud Run live at https://bike-demand-api-246440913351.us-central1.run.app | ✅ Done | `5ea4a09` |
+| **bike_demand_prediction** | R Shiny dashboard | Phase 7H complete — 6 cities; v1.0.0 released | ✅ Done | `e45ced8` |
 
 ### Trained City Models
 
@@ -23,12 +23,18 @@ Both repos form a single portfolio system. Track them together here.
 | NYC | BigQuery citibike_trips (2014–2018) + Open-Meteo | 34,187 | **345.69** | HOUR (0.52) | `models/artifacts/nyc/` |
 | Washington DC | Capital Bikeshare CSVs (2014–2018) + Open-Meteo | 37,663 | **97.47** | HOUR (0.61) | `models/artifacts/dc/` ✅ |
 
-### Next Milestones (Both Repos)
+### Next Milestones (Both Repos) — Priority Ordered
 
-| Repo | Next Phase | Dependency |
-|------|-----------|------------|
-| bike-demand-ml-system | Phase 3 — Cloud Run Deployment | None — can start now |
-| bike_demand_prediction | Phase 7F — GCP Streaming Pipeline | Waits on Python Phase 4 (Pub/Sub + Dataflow) |
+| Priority | Repo | Phase | Target Version | Dependency |
+|----------|------|-------|---------------|------------|
+| **1** | bike-demand-ml-system | Phase 6 — Observability | v2.1.0 | None — start now |
+| **2** | bike-demand-ml-system | Phase 4 — Pub/Sub + Dataflow | v3.0.0 | None — unblocked |
+| **3** | bike_demand_prediction | Phase 7F — GCP Streaming Dashboard | v1.2.0 | Waits on Python Phase 4 |
+| **4** | bike-demand-ml-system | Phase 5 — Vertex AI + MLflow | v4.0.0 | Best after streaming data exists |
+| **5** | bike_demand_prediction | Backlog — Paris/Chicago models | v1.3.0 | Data sourcing required |
+| **6** | Both | Backlog — testthat / pytest | — | None |
+| **7** | bike_demand_prediction | Backlog — Seoul GBFS | — | External API key |
+| **8** | bike_demand_prediction | Backlog — City expansion (SF/Amsterdam) | — | Data sourcing required |
 
 ---
 
@@ -92,22 +98,28 @@ Both repos form a single portfolio system. Track them together here.
 * [x] Shiny repo `model_prediction.R` — Cloud Run URL documented in `FASTAPI_URL` comment; env var already wired, no code change required
 * [x] `GCP_SA_KEY` GitHub secret added — service account `github-ci-sa` (roles/run.developer + roles/artifactregistry.writer + roles/iam.serviceAccountUser); CI Job 5 is fully active
 
-### Phase 4 — Pub/Sub + Dataflow Pipeline
+### Phase 6 — Observability ← Priority 1 (v2.1.0)
+* Structured JSON logging in `services/predictor.py` — city, inputs hash, prediction, latency_ms
+* `/metrics` Prometheus endpoint via `prometheus-fastapi-instrumentator`
+* Independent of all other phases — makes live Cloud Run service production-grade immediately
+
+### Phase 4 — Pub/Sub + Dataflow Pipeline ← Priority 2 (v3.0.0)
 * `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB=false` for local mode
 * `pipeline/dataflow_job.py` — Apache Beam: Pub/Sub → 5-min windowed aggregation → BigQuery
 * `config/gcp_config.yaml` — project ID, topic, BQ dataset, staging bucket, region
 * Unlocks R Shiny Phase 7F (companion repo waits on this)
 
-### Phase 5 — Vertex AI + Experiment Tracking
+### Phase 5 — Vertex AI + Experiment Tracking ← Priority 4 (v4.0.0)
 * MLflow `autolog()` in `models/train.py`; register model if RMSE improves vs current baseline
 * `pipeline/retrain_job.py` — BigQuery → feature engineering → retrain → log → register best model
-
-### Phase 6 — Observability
-* Structured JSON logging in `services/predictor.py` — city, inputs hash, prediction, latency_ms
-* `/metrics` Prometheus endpoint via `prometheus-fastapi-instrumentator`
+* Sequenced after Phase 4 — retrain pipeline benefits from streaming data produced by Dataflow
 
 ---
 
 ## 🚀 Next Step
 
-**Phase 3 complete — Cloud Run is live.** Next: add `GCP_SA_KEY` GitHub secret to wire CI Job 5 (auto-redeploy on merge), then begin Phase 4 (Pub/Sub + Dataflow pipeline). Cloud Run URL: `https://bike-demand-api-246440913351.us-central1.run.app`. Resume with: `"resume bike-demand-ml-system"`
+**Priority 1 — Phase 6: Observability (v2.1.0).** Add structured JSON logging to `services/predictor.py` and wire up `/metrics` Prometheus endpoint via `prometheus-fastapi-instrumentator`. Independent of all other phases — completes in one session and makes the live Cloud Run service production-grade before streaming complexity is added.
+
+**After Phase 6 → Priority 2 — Phase 4: Pub/Sub + Dataflow (v3.0.0).** Builds the streaming pipeline that unblocks the companion Shiny repo's Phase 7F (v1.2.0).
+
+Resume with: `"resume bike-demand-ml-system"`

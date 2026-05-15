@@ -3,6 +3,8 @@
 ## ⚡ Quick Summary
 This project is the **Python ML backend** in a two-repo portfolio system. It forecasts hourly bike-rental demand from weather and temporal signals, exposes the model through a FastAPI inference API, and is consumed by the companion [R Shiny dashboard](https://github.com/deepan-mehta-analytics/bike-demand-prediction) via `httr::POST /predict`. The architecture separates training from inference cleanly, persists model artifacts for reproducible deployment, and is containerised for local and cloud deployment.
 
+**v2.0.0 is live.** The API is deployed to GCP Cloud Run at `https://bike-demand-api-246440913351.us-central1.run.app` — CI automatically rebuilds and redeploys on every merge to main via Artifact Registry + `gcloud run deploy`. Next: **v3.0.0** — GCP Pub/Sub + Dataflow streaming pipeline (GBFS feeds → BigQuery).
+
 It is engineered as the next stage in a data analytics → data engineering → ML engineering trajectory: a model that ships to an API, not a notebook that ships to a screenshot.
 
 ### End-to-End ML System with FastAPI Inference, Service-Layer Architecture & Random Forest Regressor
@@ -18,7 +20,9 @@ It is engineered as the next stage in a data analytics → data engineering → 
 [![pandas](https://img.shields.io/badge/pandas-3.x-150458?style=for-the-badge&logo=pandas&logoColor=white)](https://pandas.pydata.org/)
 [![Pydantic](https://img.shields.io/badge/Pydantic-Validation-E92063?style=for-the-badge&logo=pydantic&logoColor=white)](https://docs.pydantic.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Containerised-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-[![Status](https://img.shields.io/badge/Status-In_Development-yellow?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
+[![Status](https://img.shields.io/badge/v2.0.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
+[![Status](https://img.shields.io/badge/v3.0.0-In_Development-blue?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
+[![Cloud Run](https://img.shields.io/badge/Cloud_Run-Live-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://bike-demand-api-246440913351.us-central1.run.app)
 
 ---
 
@@ -464,15 +468,15 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 - [x] Train DC model — RMSE **97.47** bikes/hr; artifacts at `models/artifacts/dc/`
 - [x] Populate Washington DC RMSE table entry
 
-### Phase 3 — Cloud Run Deployment 🔄 In Progress
+### Phase 3 — Cloud Run Deployment ✅ Done (v2.0.0)
 
 - [x] Bake all 4 city model artifacts into Docker image at build time (no runtime volume mount)
 - [x] `docker-compose.yml` — removed volume mount; image is self-contained
-- [x] GitHub Actions publish job — builds and pushes to GHCR (`ghcr.io/deepan-mehta-analytics/bike-demand-ml-system`) on merge to main; uses `GITHUB_TOKEN`, no manual secrets required
-- [x] Cloud Run deployment command documented in README (Option 4)
-- [ ] Add `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` secrets to GitHub repo settings
-- [ ] Run `gcloud run deploy` to get live Cloud Run URL
-- [ ] Update companion Shiny repo `FASTAPI_URL` to point at Cloud Run URL
+- [x] GitHub Actions Job 4 — builds and pushes to GHCR using `GITHUB_TOKEN` (no manual secrets required)
+- [x] GitHub Actions Job 5 — builds and pushes to Artifact Registry (`us-central1-docker.pkg.dev/bike-demand-ml-system/bike-demand-repo/`) + redeploys Cloud Run on every merge to main; uses `GCP_SA_KEY` secret
+- [x] `gcloud run deploy` executed — Cloud Run live at `https://bike-demand-api-246440913351.us-central1.run.app`
+- [x] Health check confirmed: `{"message":"Bike Demand Prediction API is running"}`
+- [x] Companion Shiny repo `model_prediction.R` updated with Cloud Run URL in `FASTAPI_URL` comment
 
 ### Phase 4 — Pub/Sub + Dataflow Pipeline
 

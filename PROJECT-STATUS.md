@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 4 in progress — GBFS poller + Dataflow scaffolding committed (v3.0.0) | 🔄 In Progress | `0b22378` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 4 in progress — GBFS poller + Dataflow scaffolding committed (v3.0.0) | 🔄 In Progress | `bf2d96c` |
 | **bike_demand_prediction** | R Shiny dashboard | Phase 7H complete — 6 cities; v1.0.0 released | ✅ Done | `e45ced8` |
 
 ### Trained City Models

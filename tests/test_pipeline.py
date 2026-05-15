@@ -14,7 +14,6 @@ from pipeline.gbfs_to_pubsub import (              # functions under test from t
 )
 from pipeline.dataflow_job import (                # Beam transforms and config loader under test
     ParseMessage,                                  # DoFn: parse raw bytes → snapshot dict
-    WindowedAgg,                                   # CombineFn: aggregate snapshots within a window
     build_pipeline,                                # full Beam DAG builder (used in DirectRunner test)
     _load_config,                                  # YAML config loader
 )

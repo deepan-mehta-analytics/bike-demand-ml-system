@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 3 in progress — GHCR publish wired; Cloud Run pending | 🔄 In Progress | `83cc1a2` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 3 in progress — GHCR publish wired; Cloud Run deploy ready (GCP billing enabled, free tier) | 🔄 In Progress | `83cc1a2` |
 | **bike_demand_prediction** | R Shiny dashboard | Phase 7H complete — 6 cities; v1.0.0 released | ✅ Done | `f8b6f26` |
 
 ### Trained City Models
@@ -87,7 +87,7 @@ Both repos form a single portfolio system. Track them together here.
 * [x] README — Option 3 (GHCR pull) + Option 4 (Cloud Run gcloud deploy) documented
 * [x] GitHub release `v1.0.0` published on both repos (2026-05-08)
 * [x] NotebookLM PKB audit complete — 5 documents in `notebooklm/` (gitignored)
-* [ ] Run `gcloud run deploy` to get live Cloud Run URL (pending GCP access)
+* [ ] Run `gcloud run deploy` to get live Cloud Run URL — **GCP billing enabled (free tier), ready to run**
 * [ ] Update Shiny repo `model_prediction.R` `FASTAPI_URL` with Cloud Run URL
 
 ### Phase 4 — Pub/Sub + Dataflow Pipeline
@@ -108,4 +108,4 @@ Both repos form a single portfolio system. Track them together here.
 
 ## 🚀 Next Step
 
-**Phase 3 — Cloud Run Deployment (in progress).** Run `gcloud run deploy` once GCP access is available to get the live Cloud Run URL, then update Shiny repo `FASTAPI_URL`. Resume with: `"resume bike-demand-ml-system — check workflow_status.md and pick up from the next pending action"`
+**Phase 3 — Cloud Run Deployment (unblocked).** GCP billing is enabled (free tier) as of 2026-05-15. Run `gcloud run deploy bike-demand-api --image ghcr.io/deepan-mehta-analytics/bike-demand-ml-system:latest --platform managed --region us-central1 --allow-unauthenticated --memory 512Mi --port 8000`, then update Shiny repo `FASTAPI_URL` with the returned Cloud Run URL. Resume with: `"resume bike-demand-ml-system"`

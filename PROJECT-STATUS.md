@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 4 in progress — GBFS poller + Dataflow scaffolding committed (v3.0.0) | 🔄 In Progress | `bf2d96c` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 4 complete — GBFS→Pub/Sub→Dataflow→BigQuery end-to-end verified (v3.0.0) | ✅ Done | `2f60acb` |
 | **bike_demand_prediction** | R Shiny dashboard | Phase 7H complete — 6 cities; v1.0.0 released | ✅ Done | `e45ced8` |
 
 ### Trained City Models
@@ -28,8 +28,8 @@ Both repos form a single portfolio system. Track them together here.
 | Priority | Repo | Phase | Target Version | Dependency |
 |----------|------|-------|---------------|------------|
 | ~~1~~ | bike-demand-ml-system | ~~Phase 6 — Observability~~ | ~~v2.1.0~~ | **✅ Shipped** |
-| **1** | bike-demand-ml-system | Phase 4 — Pub/Sub + Dataflow | v3.0.0 | None — unblocked |
-| **2** | bike_demand_prediction | Phase 7F — GCP Streaming Dashboard | v1.2.0 | Waits on Python Phase 4 |
+| ~~1~~ | bike-demand-ml-system | ~~Phase 4 — Pub/Sub + Dataflow~~ | ~~v3.0.0~~ | **✅ Shipped** |
+| **1** | bike_demand_prediction | Phase 7F — GCP Streaming Dashboard | v1.2.0 | ✅ Unblocked — BigQuery table live |
 | **3** | bike-demand-ml-system | Phase 5 — Vertex AI + MLflow | v4.0.0 | Best after streaming data exists |
 | **4** | bike_demand_prediction | Backlog — Paris/Chicago models | v1.3.0 | Data sourcing required |
 | **5** | Both | Backlog — testthat / pytest | — | None |
@@ -76,11 +76,11 @@ Both repos form a single portfolio system. Track them together here.
 * No hyperparameter tuning — single fixed RF config (`n_estimators=100`, `random_state=42`)
 * No experiment tracking — no MLflow / Vertex AI integration
 * No API authentication or rate-limiting
-* No structured logging or observability in service layer
 * No drift monitoring on inference inputs
 * Paris and Chicago have no trained models — service falls back to Seoul (proxy only)
 * NYC RMSE (345.69) is higher due to larger absolute trip volumes; adding weather data beyond
   temperature/humidity (e.g. actual visibility, not Open-Meteo zeros) would likely reduce it
+* Dataflow streaming pipeline has **no always-free tier** (~$0.05/hr on e2-medium) — run only for demos; cancel after verification
 
 ---
 
@@ -103,15 +103,16 @@ Both repos form a single portfolio system. Track them together here.
 * [x] `/metrics` Prometheus endpoint via `prometheus-fastapi-instrumentator==7.1.0` — pure HTTP, no GCP cost
 * [x] GitHub release v2.1.0 published
 
-### Phase 4 — Pub/Sub + Dataflow Pipeline 🔄 In Progress (v3.0.0)
-* [x] `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB=false` → stdout; TFL adapter for London
-* [x] `pipeline/dataflow_job.py` — Apache Beam: ParseMessage → 5-min FixedWindows → WindowedAgg → BigQuery sink
-* [x] `config/gcp_config.yaml` — project ID, Pub/Sub topic/sub, BQ dataset/table, Dataflow config, GBFS city URLs
+### Phase 4 — Pub/Sub + Dataflow Pipeline ✅ Done (v3.0.0 — commit 2f60acb)
+* [x] `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB=false` → stdout; TFL adapter for London; 1 JSON array msg per city (4 msgs/cycle)
+* [x] `pipeline/dataflow_job.py` — Apache Beam: ParseMessage → 5-min FixedWindows → WindowedAgg → BigQuery sink; WindowsPath pickle fix; worker_zone rename
+* [x] `config/gcp_config.yaml` — project ID, Pub/Sub topic/sub, BQ dataset/table, Dataflow config (e2-medium, us-central1-f), GBFS city URLs
 * [x] `requirements-pipeline.txt` — apache-beam[gcp]==2.62.0, google-cloud-pubsub==2.26.1, pyyaml==6.0.2
 * [x] `tests/test_pipeline.py` — 5 tests (GBFS/TFL schema, ParseMessage, DirectRunner e2e); auto-skipped in CI
 * [x] GCP provisioning — Pub/Sub `gbfs-bike-stations` + sub, BigQuery dataset `bike_demand`, GCS bucket `gs://bike-demand-staging`, IAM roles for `github-ci-sa` (2026-05-15)
-* [ ] End-to-end verify — USE_PUBSUB=true poller + DataflowRunner job → rows visible in BigQuery console
-* Unlocks R Shiny Phase 7F (companion repo waits on this)
+* [x] End-to-end verify — `bike_demand.station_snapshots`: nyc 6,624 rows, first_window 2026-05-15 13:05:00 UTC ✅ (2026-05-15)
+* [x] GitHub release v3.0.0 published (2026-05-15)
+* Unlocks R Shiny Phase 7F ✅ — BigQuery table live
 
 ### Phase 5 — Vertex AI + Experiment Tracking ← Priority 4 (v4.0.0)
 * MLflow `autolog()` in `models/train.py`; register model if RMSE improves vs current baseline
@@ -122,8 +123,8 @@ Both repos form a single portfolio system. Track them together here.
 
 ## 🚀 Next Step
 
-**Phase 4 in progress — GCP provisioning.** Pipeline scaffolding committed (commit `0b22378`). Next: run the one-time gcloud provisioning commands (Pub/Sub topic/sub, BigQuery dataset, GCS staging bucket, IAM roles), then verify end-to-end with `USE_PUBSUB=true` poller + DataflowRunner → BigQuery console. See README Option 5 for the full gcloud command list.
+**Phase 7F (R Shiny GCP Streaming Dashboard) is now unblocked.** Python Phase 4 complete — `bike_demand.station_snapshots` table is live in BigQuery with real GBFS data. Companion Shiny repo can now build the streaming dashboard consuming this table (v1.2.0 milestone).
 
-*Phase 6 (Observability) is complete — v2.1.0 shipped on 2026-05-15.*
+*Phase 4 (Pub/Sub + Dataflow) complete — v3.0.0 shipped on 2026-05-15.*
 
-Resume with: `"resume bike-demand-ml-system"`
+Resume with: `"resume bike-demand-ml-system — check workflow_status.md and pick up from the next pending action"`

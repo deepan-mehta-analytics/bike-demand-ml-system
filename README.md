@@ -3,7 +3,7 @@
 ## ⚡ Quick Summary
 This project is the **Python ML backend** in a two-repo portfolio system. It forecasts hourly bike-rental demand from weather and temporal signals, exposes the model through a FastAPI inference API, and is consumed by the companion [R Shiny dashboard](https://github.com/deepan-mehta-analytics/bike-demand-prediction) via `httr::POST /predict`. The architecture separates training from inference cleanly, persists model artifacts for reproducible deployment, and is containerised for local and cloud deployment.
 
-**v2.1.0 is live.** The API is deployed to GCP Cloud Run at `https://bike-demand-api-246440913351.us-central1.run.app` with structured JSON logging to Cloud Logging and a Prometheus `/metrics` endpoint. CI automatically rebuilds and redeploys on every merge to main. Next: **v3.0.0** — GCP Pub/Sub + Dataflow streaming pipeline (GBFS feeds → BigQuery).
+**v3.0.0 is live.** A real-time GBFS streaming pipeline polls 4 cities every 60 seconds, publishes to Cloud Pub/Sub, and aggregates 5-minute windows into BigQuery via Apache Beam Dataflow — end-to-end verified on 2026-05-15 with 6,624 NYC rows confirmed in `bike_demand.station_snapshots`. The FastAPI inference API runs on GCP Cloud Run at `https://bike-demand-api-246440913351.us-central1.run.app` with structured JSON logging and a Prometheus `/metrics` endpoint. Next: **v4.0.0** — Vertex AI + MLflow experiment tracking and automated retraining.
 
 It is engineered as the next stage in a data analytics → data engineering → ML engineering trajectory: a model that ships to an API, not a notebook that ships to a screenshot.
 
@@ -20,8 +20,8 @@ It is engineered as the next stage in a data analytics → data engineering → 
 [![pandas](https://img.shields.io/badge/pandas-3.x-150458?style=for-the-badge&logo=pandas&logoColor=white)](https://pandas.pydata.org/)
 [![Pydantic](https://img.shields.io/badge/Pydantic-Validation-E92063?style=for-the-badge&logo=pydantic&logoColor=white)](https://docs.pydantic.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Containerised-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-[![Status](https://img.shields.io/badge/v2.1.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
-[![Status](https://img.shields.io/badge/v3.0.0-In_Development-blue?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
+[![Status](https://img.shields.io/badge/v3.0.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
+[![Status](https://img.shields.io/badge/v4.0.0-In_Development-blue?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
 [![Cloud Run](https://img.shields.io/badge/Cloud_Run-Live-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://bike-demand-api-246440913351.us-central1.run.app)
 [![Prometheus](https://img.shields.io/badge/Prometheus-metrics-orange?style=for-the-badge&logo=prometheus&logoColor=white)](https://bike-demand-api-246440913351.us-central1.run.app/metrics)
 
@@ -573,16 +573,16 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 - [x] Structured JSON logging in `services/predictor.py` — city, inputs_hash, n_records, latency_ms → Cloud Logging (stdout, free)
 - [x] `/metrics` endpoint via `prometheus-fastapi-instrumentator` — Prometheus text format, pure HTTP, no GCP cost
 
-### Phase 4 — Pub/Sub + Dataflow Pipeline 🔄 **In Progress (v3.0.0)**
+### Phase 4 — Pub/Sub + Dataflow Pipeline ✅ **Done (v3.0.0 — 2026-05-15)**
 
 - [x] `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB=false` prints to stdout locally
 - [x] `pipeline/dataflow_job.py` — Apache Beam: Pub/Sub → 5-min FixedWindows → BigQuery `station_snapshots`
-- [x] `config/gcp_config.yaml` — project ID, topic, BQ dataset, Dataflow config, GBFS city URLs
+- [x] `config/gcp_config.yaml` — project ID, topic, BQ dataset, Dataflow config (e2-medium, us-central1-f), GBFS city URLs
 - [x] `requirements-pipeline.txt` — `apache-beam[gcp]`, `google-cloud-pubsub`, `pyyaml` (separate from inference image)
 - [x] `tests/test_pipeline.py` — 5 tests: GBFS schema, TFL schema, ParseMessage (valid + invalid), DirectRunner end-to-end
-- [ ] GCP provisioning — create Pub/Sub topic/subscription, BigQuery dataset, GCS staging bucket, grant IAM roles
-- [ ] Verify end-to-end: `USE_PUBSUB=true` poller → Pub/Sub → DataflowRunner → BigQuery rows visible in console
-- Unlocks companion Shiny repo Phase 7F (v1.2.0)
+- [x] GCP provisioning — Pub/Sub topic/sub, BigQuery dataset `bike_demand`, GCS bucket `gs://bike-demand-staging`, IAM roles
+- [x] End-to-end verified — `bike_demand.station_snapshots`: nyc 6,624 rows, first_window 2026-05-15 13:05:00 UTC ✅
+- Unlocks companion Shiny repo Phase 7F (v1.2.0) ✅
 
 ### Phase 5 — Vertex AI + Experiment Tracking ← **Priority 4 (v4.0.0 — after streaming)**
 

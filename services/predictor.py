@@ -1,11 +1,32 @@
 # ── Imports ─────────────────────────────────────────────────────────────────
-import logging                                                         # standard library logger for fallback warnings
+import hashlib                                                         # SHA-256 fingerprint of input payload for log correlation
+import json                                                            # serialize log records as single-line JSON to stdout
+import logging                                                         # standard library structured logging
+import time                                                            # wall-clock latency measurement
 from pathlib import Path                                               # check artifact directory existence
 from typing import Dict, List                                          # type hints for cache and service interface
 
 from models.predict import load_artifacts, predict                     # inference utilities from ML layer
 
-logger = logging.getLogger(__name__)                                   # module-level logger; callers configure handlers
+
+# ── JSON Log Formatter ───────────────────────────────────────────────────────
+class _JsonFormatter(logging.Formatter):                               # emit each log record as a single JSON line to stdout
+    def format(self, record: logging.LogRecord) -> str:               # override default text formatting
+        try:
+            payload = json.loads(record.getMessage())                  # parse structured payload when message is a JSON string
+        except (json.JSONDecodeError, TypeError):
+            payload = {"message": record.getMessage()}                 # fallback: treat message as plain text
+        payload["severity"] = record.levelname                         # Cloud Logging severity field (INFO/WARNING/ERROR)
+        payload["logger"]   = record.name                              # module path for log-based filtering
+        return json.dumps(payload)                                     # single-line JSON; Cloud Run stdout → Cloud Logging (free)
+
+
+# ── Logger Setup ─────────────────────────────────────────────────────────────
+_handler = logging.StreamHandler()                                     # write to stdout; Cloud Run captures stdout for Cloud Logging
+_handler.setFormatter(_JsonFormatter())                                # apply JSON format to every emitted record
+logger = logging.getLogger(__name__)                                   # module-level logger keyed to services.predictor
+logger.addHandler(_handler)                                            # attach the JSON handler to this logger
+logger.propagate = False                                               # prevent double-emission to root logger
 
 # ── Per-City Artifact Cache ──────────────────────────────────────────────────
 # Artifacts are loaded on first call for each city, then cached for the process lifetime.
@@ -77,10 +98,22 @@ def predict_service(data: List[Dict], city: str = "seoul") -> List[float]:
         - Centralises per-city routing and lazy artifact loading
         - Hook point for future logging, monitoring, or A/B testing
     """
+    t0 = time.perf_counter()                                           # record wall-clock start for latency measurement
+    inputs_hash = hashlib.sha256(                                      # fingerprint the payload for request correlation
+        json.dumps(data, sort_keys=True).encode()                      # serialise with sorted keys for deterministic hash
+    ).hexdigest()[:12]                                                 # first 12 hex chars — sufficient for correlation
     model, feature_columns = _get_artifacts(city)                      # lazy-load and cache city-specific artifacts
     predictions = predict(                                             # delegate to shared inference pipeline
         data=data,                                                     # input records passed through from API layer
         model=model,                                                   # cached trained model for this city
         feature_columns=feature_columns,                               # cached schema for column alignment
     )
+    latency_ms = round((time.perf_counter() - t0) * 1000, 2)          # wall-clock ms from call entry to numpy output
+    logger.info(json.dumps({                                           # emit structured prediction event → Cloud Logging (free)
+        "event":       "prediction",                                   # event type label for log-based filtering
+        "city":        city,                                           # resolved city slug after fallback check
+        "n_records":   len(data),                                      # number of input rows scored this call
+        "inputs_hash": inputs_hash,                                    # 12-char hash for cross-log request correlation
+        "latency_ms":  latency_ms,                                     # end-to-end inference latency in milliseconds
+    }))
     return predictions.tolist()                                        # convert numpy array to JSON-serializable list

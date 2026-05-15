@@ -1,6 +1,7 @@
 # ── Imports ─────────────────────────────────────────────────────────────────
 from typing import List                                                # type hint for batch record list
 from fastapi import FastAPI                                            # web framework powering the inference API
+from prometheus_fastapi_instrumentator import Instrumentator           # expose /metrics endpoint; pure HTTP, no GCP cost
 from pydantic import BaseModel                                         # base class for request schema validation
 
 from services.predictor import predict_service                         # service-layer prediction orchestrator
@@ -32,6 +33,7 @@ class PredictionRequest(BaseModel):                                    # top-lev
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI()                                                        # create the FastAPI application instance
+Instrumentator().instrument(app).expose(app)                          # wire /metrics endpoint; no Cloud Monitoring calls — free
 
 
 # ── Health Check ──────────────────────────────────────────────────────────────

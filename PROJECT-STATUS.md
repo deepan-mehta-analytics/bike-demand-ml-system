@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 6 complete — Cloud Run live; structured logging + /metrics endpoint | ✅ Done | `c6fd1d0` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 4 in progress — GBFS poller + Dataflow scaffolding committed (v3.0.0) | 🔄 In Progress | `0b22378` |
 | **bike_demand_prediction** | R Shiny dashboard | Phase 7H complete — 6 cities; v1.0.0 released | ✅ Done | `e45ced8` |
 
 ### Trained City Models
@@ -103,10 +103,14 @@ Both repos form a single portfolio system. Track them together here.
 * [x] `/metrics` Prometheus endpoint via `prometheus-fastapi-instrumentator==7.1.0` — pure HTTP, no GCP cost
 * [x] GitHub release v2.1.0 published
 
-### Phase 4 — Pub/Sub + Dataflow Pipeline ← Priority 2 (v3.0.0)
-* `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB=false` for local mode
-* `pipeline/dataflow_job.py` — Apache Beam: Pub/Sub → 5-min windowed aggregation → BigQuery
-* `config/gcp_config.yaml` — project ID, topic, BQ dataset, staging bucket, region
+### Phase 4 — Pub/Sub + Dataflow Pipeline 🔄 In Progress (v3.0.0)
+* [x] `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB=false` → stdout; TFL adapter for London
+* [x] `pipeline/dataflow_job.py` — Apache Beam: ParseMessage → 5-min FixedWindows → WindowedAgg → BigQuery sink
+* [x] `config/gcp_config.yaml` — project ID, Pub/Sub topic/sub, BQ dataset/table, Dataflow config, GBFS city URLs
+* [x] `requirements-pipeline.txt` — apache-beam[gcp]==2.62.0, google-cloud-pubsub==2.26.1, pyyaml==6.0.2
+* [x] `tests/test_pipeline.py` — 5 tests (GBFS/TFL schema, ParseMessage, DirectRunner e2e); auto-skipped in CI
+* [ ] GCP provisioning — Pub/Sub topic/sub, BigQuery dataset, GCS staging bucket, IAM roles for github-ci-sa
+* [ ] End-to-end verify — USE_PUBSUB=true poller + DataflowRunner job → rows visible in BigQuery console
 * Unlocks R Shiny Phase 7F (companion repo waits on this)
 
 ### Phase 5 — Vertex AI + Experiment Tracking ← Priority 4 (v4.0.0)
@@ -118,7 +122,7 @@ Both repos form a single portfolio system. Track them together here.
 
 ## 🚀 Next Step
 
-**Priority 1 — Phase 4: Pub/Sub + Dataflow (v3.0.0).** Build `pipeline/gbfs_to_pubsub.py` (GBFS poller → Pub/Sub topic) + `pipeline/dataflow_job.py` (Apache Beam: Pub/Sub → 5-min window → BigQuery). This is the highest-impact remaining phase and directly unblocks the companion Shiny repo's Phase 7F (v1.2.0).
+**Phase 4 in progress — GCP provisioning.** Pipeline scaffolding committed (commit `0b22378`). Next: run the one-time gcloud provisioning commands (Pub/Sub topic/sub, BigQuery dataset, GCS staging bucket, IAM roles), then verify end-to-end with `USE_PUBSUB=true` poller + DataflowRunner → BigQuery console. See README Option 5 for the full gcloud command list.
 
 *Phase 6 (Observability) is complete — v2.1.0 shipped on 2026-05-15.*
 

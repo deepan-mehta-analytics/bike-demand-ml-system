@@ -10,12 +10,9 @@ import yaml                                        # YAML config parser for gcp_
 from apache_beam.transforms.window import FixedWindows, TimestampedValue  # windowing primitives
 
 # ── Config ────────────────────────────────────────────────────
-_CONFIG_PATH = (                                   # absolute path to YAML config relative to this file
-    Path(__file__).parent.parent / "config" / "gcp_config.yaml"
-)
-
 def _load_config() -> dict[str, Any]:              # load GCP pipeline config from the YAML file on disk
-    with open(_CONFIG_PATH, "r", encoding="utf-8") as f:  # open config for reading
+    config_path = Path(__file__).parent.parent / "config" / "gcp_config.yaml"  # computed at call time, not pickled
+    with open(config_path, "r", encoding="utf-8") as f:  # open config for reading
         return yaml.safe_load(f)                   # parse YAML safely and return as a nested dict
 
 # ── BQ Schema ─────────────────────────────────────────────────
@@ -188,10 +185,11 @@ if __name__ == "__main__":                         # run the pipeline when execu
         pipeline_opts.update({                     # merge Dataflow-specific options into the base dict
             "project":          config["project_id"],             # GCP project for the Dataflow job
             "region":           config["region"],                 # Dataflow job region (us-central1)
+            "worker_zone":      config["dataflow"]["zone"],       # pin to specific zone to avoid stockout errors
             "staging_location": config["dataflow"]["staging_bucket"],  # GCS staging path for job artefacts
             "temp_location":    config["dataflow"]["staging_bucket"],  # GCS temp path for intermediate data
             "max_num_workers":  config["dataflow"]["max_num_workers"], # cap workers at 1 to limit demo cost
-            "machine_type":     config["dataflow"]["machine_type"],    # cheapest viable machine (n1-standard-1)
+            "machine_type":     config["dataflow"]["machine_type"],    # e2-small: better availability, 2 GB RAM
         })
         test_messages_arg = None                   # DataflowRunner reads from live Pub/Sub; no test messages
 

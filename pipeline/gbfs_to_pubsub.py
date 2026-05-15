@@ -29,12 +29,9 @@ logger.propagate = False                         # prevent duplicate output via 
 logger.setLevel(logging.INFO)                    # capture INFO, WARNING, ERROR and above
 
 # ── Config ────────────────────────────────────────────────────
-_CONFIG_PATH = (                                   # absolute path to YAML config relative to this file
-    Path(__file__).parent.parent / "config" / "gcp_config.yaml"
-)
-
 def _load_config() -> dict[str, Any]:              # load GCP + GBFS config from the YAML file on disk
-    with open(_CONFIG_PATH, "r", encoding="utf-8") as f:  # open config file for reading
+    config_path = Path(__file__).parent.parent / "config" / "gcp_config.yaml"  # computed at call time, not pickled
+    with open(config_path, "r", encoding="utf-8") as f:  # open config file for reading
         return yaml.safe_load(f)                   # parse YAML safely and return as a nested dict
 
 # ── GBFS Fetch ────────────────────────────────────────────────

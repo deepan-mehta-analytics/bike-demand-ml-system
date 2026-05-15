@@ -16,7 +16,8 @@ bigquery:
 dataflow:
   staging_bucket: gs://bike-demand-staging/temp  # GCS path for Dataflow job staging and temp files
   max_num_workers: 1                             # cap at 1 worker to minimise cost during demo runs
-  machine_type: n1-standard-1                   # cheapest viable machine type for streaming Dataflow jobs
+  machine_type: e2-medium                        # e2-medium (4 GB RAM): enough for Python streaming harness overhead
+  zone: us-central1-f                            # pin to us-central1-f to avoid zone stockout errors
   window_seconds: 300                           # FixedWindow size in seconds (5 minutes)
 
 # ── GBFS polling settings ─────────────────────────────────────

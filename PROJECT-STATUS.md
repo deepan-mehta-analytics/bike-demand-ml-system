@@ -109,7 +109,7 @@ Both repos form a single portfolio system. Track them together here.
 * [x] `config/gcp_config.yaml` — project ID, Pub/Sub topic/sub, BQ dataset/table, Dataflow config, GBFS city URLs
 * [x] `requirements-pipeline.txt` — apache-beam[gcp]==2.62.0, google-cloud-pubsub==2.26.1, pyyaml==6.0.2
 * [x] `tests/test_pipeline.py` — 5 tests (GBFS/TFL schema, ParseMessage, DirectRunner e2e); auto-skipped in CI
-* [ ] GCP provisioning — Pub/Sub topic/sub, BigQuery dataset, GCS staging bucket, IAM roles for github-ci-sa
+* [x] GCP provisioning — Pub/Sub `gbfs-bike-stations` + sub, BigQuery dataset `bike_demand`, GCS bucket `gs://bike-demand-staging`, IAM roles for `github-ci-sa` (2026-05-15)
 * [ ] End-to-end verify — USE_PUBSUB=true poller + DataflowRunner job → rows visible in BigQuery console
 * Unlocks R Shiny Phase 7F (companion repo waits on this)
 

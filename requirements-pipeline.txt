@@ -1,0 +1,6 @@
+# Pipeline-only dependencies — install alongside requirements.txt for pipeline development.
+# These are NOT included in requirements.txt to keep the inference Docker image lean.
+# Install with: pip install -r requirements-pipeline.txt
+apache-beam[gcp]==2.62.0          # Apache Beam SDK with GCP connectors (Dataflow, Pub/Sub, BigQuery)
+google-cloud-pubsub==2.26.1       # Cloud Pub/Sub client library for publishing station snapshots
+pyyaml==6.0.2                     # YAML parser for reading config/gcp_config.yaml

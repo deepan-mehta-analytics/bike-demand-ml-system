@@ -96,7 +96,8 @@ bike-demand-ml-system/
 │
 ├── README.md
 ├── PROJECT-STATUS.md
-├── requirements.txt                    ← pinned Python dependencies
+├── requirements.txt                    ← pinned Python dependencies (inference API + tests)
+├── requirements-pipeline.txt           ← pipeline-only deps (apache-beam, pubsub, pyyaml) — not in Docker image
 ├── Dockerfile                          ← python:3.11-slim, non-root user, health check
 ├── docker-compose.yml                  ← local dev orchestration; models volume mount
 ├── .dockerignore                       ← excludes venv/, .git/, *.pkl from build context
@@ -138,7 +139,16 @@ bike-demand-ml-system/
 ├── tests/
 │   ├── conftest.py                     ← anyio asyncio backend fixture for async tests
 │   ├── test_features.py                ← unit tests: temporal extraction, one-hot, schema
-│   └── test_api.py                     ← integration tests: 200/422 via httpx.AsyncClient
+│   ├── test_api.py                     ← integration tests: 200/422 via httpx.AsyncClient
+│   └── test_pipeline.py                ← pipeline tests: DoFn unit + DirectRunner end-to-end (needs requirements-pipeline.txt)
+│
+├── config/
+│   └── gcp_config.yaml                 ← GCP project, Pub/Sub topic, BigQuery, Dataflow, GBFS city URLs
+│
+├── pipeline/
+│   ├── __init__.py                     ← marks pipeline/ as a Python package
+│   ├── gbfs_to_pubsub.py               ← GBFS station poller → Pub/Sub topic (USE_PUBSUB=false for local output)
+│   └── dataflow_job.py                 ← Apache Beam: Pub/Sub → 5-min FixedWindows → BigQuery station_snapshots
 │
 └── venv/                               ← virtual environment (gitignored)
 ```
@@ -275,6 +285,77 @@ Cloud Run returns a service URL on first deploy. Use that URL as `FASTAPI_URL` i
 
 ---
 
+### 📡 Option 5 — Pub/Sub + Dataflow Streaming Pipeline (v3.0.0)
+
+The streaming pipeline polls live GBFS bike-station feeds, publishes to Cloud Pub/Sub, and runs an Apache Beam job that aggregates 5-minute windows into BigQuery.
+
+#### Step 1 — Install pipeline dependencies
+
+```bash
+pip install -r requirements-pipeline.txt
+```
+
+#### Step 2 — Run the GBFS poller locally (no GCP account required)
+
+```bash
+# USE_PUBSUB=false → prints station JSON to stdout instead of publishing to Pub/Sub
+USE_PUBSUB=false python -m pipeline.gbfs_to_pubsub
+```
+
+Each poll round emits one JSON line per station across NYC, DC, London, and Chicago.
+
+#### Step 3 — Run the Beam pipeline locally with DirectRunner (zero GCP cost)
+
+```bash
+# DirectRunner uses synthetic test messages — no Pub/Sub or BigQuery credentials needed
+python -m pipeline.dataflow_job --runner Direct
+```
+
+#### Step 4 — One-time GCP provisioning (required before DataflowRunner)
+
+Run these `gcloud` commands once to create the cloud resources:
+
+```bash
+# Enable required APIs
+gcloud services enable pubsub.googleapis.com dataflow.googleapis.com \
+  bigquery.googleapis.com storage.googleapis.com --project bike-demand-ml-system
+
+# Create Pub/Sub topic and subscription
+gcloud pubsub topics create gbfs-bike-stations --project bike-demand-ml-system
+gcloud pubsub subscriptions create gbfs-bike-stations-sub \
+  --topic gbfs-bike-stations --ack-deadline 60 --project bike-demand-ml-system
+
+# Create BigQuery dataset and GCS staging bucket
+bq mk --dataset --project_id bike-demand-ml-system --location US bike_demand
+gsutil mb -p bike-demand-ml-system -l us-central1 gs://bike-demand-staging
+
+# Grant service account the required Dataflow roles
+for ROLE in roles/pubsub.subscriber roles/pubsub.publisher \
+  roles/bigquery.dataEditor roles/dataflow.worker roles/storage.objectAdmin; do
+  gcloud projects add-iam-policy-binding bike-demand-ml-system \
+    --member="serviceAccount:github-ci-sa@bike-demand-ml-system.iam.gserviceaccount.com" \
+    --role="$ROLE"
+done
+```
+
+#### Step 5 — Run on GCP Dataflow (~$0.05/hr; tear down after demo)
+
+```bash
+# Start the poller publishing to Cloud Pub/Sub
+USE_PUBSUB=true python -m pipeline.gbfs_to_pubsub &
+
+# Launch the Dataflow streaming job (runs until cancelled)
+python -m pipeline.dataflow_job --runner DataflowRunner
+
+# When done — find the job ID and cancel to stop billing
+gcloud dataflow jobs list --project bike-demand-ml-system
+gcloud dataflow jobs cancel <job-id> --region us-central1
+```
+
+> **Cost guard:** All development and testing uses `DirectRunner` (zero cost). Run `DataflowRunner` only for a short demo window (1–2 hours ≈ $0.10 total), then cancel. Pub/Sub polling at 4 cities × 60s interval stays well under the 10 GiB/month free tier.
+
+---
+
 ## 🧪 Tests
 
 ```bash
@@ -285,14 +366,22 @@ python models/train.py
 pytest tests/
 ```
 
-The suite has two modules:
+The suite has three modules:
 
 | Module | Type | What it covers |
 |---|---|---|
 | `tests/test_features.py` | Unit | Temporal extraction (year/month/day/dayofweek), one-hot encoding for SEASONS and HOLIDAY, feature schema completeness |
 | `tests/test_api.py` | Integration | `httpx.AsyncClient` against the live ASGI app: 200 for single record, 200 for batch, 422 for wrong type (`HOUR="not-an-int"`), 422 for missing required field |
+| `tests/test_pipeline.py` | Unit + Pipeline | GBFS/TFL snapshot schema, ParseMessage DoFn (valid + malformed), DirectRunner end-to-end aggregation; auto-skipped in CI unless `requirements-pipeline.txt` is installed |
 
-CI runs lint → pytest → docker build → push to Docker Hub on every push to `main`.
+To run pipeline tests locally:
+
+```bash
+pip install -r requirements-pipeline.txt
+pytest tests/test_pipeline.py -v
+```
+
+CI runs lint → pytest → docker build → push to GHCR on every push to `main`.
 
 ---
 
@@ -437,7 +526,7 @@ The 7× spread between summer rush and middle-of-night confirms the model captur
 - No hyperparameter tuning (GridSearch / Optuna)
 - No experiment tracking (MLflow / Weights & Biases)
 - No request authentication or rate-limiting on the API
-- No structured logging or observability hooks
+- ~~No structured logging or observability hooks~~ — structured JSON → Cloud Logging + Prometheus `/metrics` shipped in v2.1.0 ✅
 
 These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 
@@ -484,11 +573,15 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 - [x] Structured JSON logging in `services/predictor.py` — city, inputs_hash, n_records, latency_ms → Cloud Logging (stdout, free)
 - [x] `/metrics` endpoint via `prometheus-fastapi-instrumentator` — Prometheus text format, pure HTTP, no GCP cost
 
-### Phase 4 — Pub/Sub + Dataflow Pipeline ← **Priority 2 (v3.0.0)**
+### Phase 4 — Pub/Sub + Dataflow Pipeline 🔄 **In Progress (v3.0.0)**
 
-- [ ] `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB=false` runs locally
-- [ ] `pipeline/dataflow_job.py` — Apache Beam: Pub/Sub → 5-min window → BigQuery / DuckDB
-- [ ] `config/gcp_config.yaml` — project ID, topic, BQ dataset, staging bucket, region
+- [x] `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB=false` prints to stdout locally
+- [x] `pipeline/dataflow_job.py` — Apache Beam: Pub/Sub → 5-min FixedWindows → BigQuery `station_snapshots`
+- [x] `config/gcp_config.yaml` — project ID, topic, BQ dataset, Dataflow config, GBFS city URLs
+- [x] `requirements-pipeline.txt` — `apache-beam[gcp]`, `google-cloud-pubsub`, `pyyaml` (separate from inference image)
+- [x] `tests/test_pipeline.py` — 5 tests: GBFS schema, TFL schema, ParseMessage (valid + invalid), DirectRunner end-to-end
+- [ ] GCP provisioning — create Pub/Sub topic/subscription, BigQuery dataset, GCS staging bucket, grant IAM roles
+- [ ] Verify end-to-end: `USE_PUBSUB=true` poller → Pub/Sub → DataflowRunner → BigQuery rows visible in console
 - Unlocks companion Shiny repo Phase 7F (v1.2.0)
 
 ### Phase 5 — Vertex AI + Experiment Tracking ← **Priority 4 (v4.0.0 — after streaming)**

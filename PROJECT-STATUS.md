@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 3 in progress — GHCR publish wired; Cloud Run deploy ready (GCP billing enabled, free tier) | 🔄 In Progress | `83cc1a2` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 3 complete — Cloud Run live at https://bike-demand-api-246440913351.us-central1.run.app | ✅ Done | `6f8f7eb` |
 | **bike_demand_prediction** | R Shiny dashboard | Phase 7H complete — 6 cities; v1.0.0 released | ✅ Done | `f8b6f26` |
 
 ### Trained City Models
@@ -80,15 +80,17 @@ Both repos form a single portfolio system. Track them together here.
 
 ## 🔜 Roadmap
 
-### Phase 3 — Cloud Run Deployment 🔄 IN PROGRESS
+### Phase 3 — Cloud Run Deployment ✅ DONE
 * [x] All 4 city models baked into Docker image at build time — no volume mount required
 * [x] `docker-compose.yml` — volume section removed; image is self-contained
 * [x] CI publish job — `docker/build-push-action` pushes `ghcr.io/deepan-mehta-analytics/bike-demand-ml-system:{latest,sha}` to GHCR on merge to main; uses auto-injected `GITHUB_TOKEN` (no manual secrets required)
+* [x] CI Job 5 (`publish-gar`) added — builds and pushes to GAR + redeploys Cloud Run on every merge to main; requires `GCP_SA_KEY` GitHub secret
 * [x] README — Option 3 (GHCR pull) + Option 4 (Cloud Run gcloud deploy) documented
 * [x] GitHub release `v1.0.0` published on both repos (2026-05-08)
 * [x] NotebookLM PKB audit complete — 5 documents in `notebooklm/` (gitignored)
-* [ ] Run `gcloud run deploy` to get live Cloud Run URL — **GCP billing enabled (free tier), ready to run**
-* [ ] Update Shiny repo `model_prediction.R` `FASTAPI_URL` with Cloud Run URL
+* [x] Cloud Run live: **https://bike-demand-api-246440913351.us-central1.run.app** (2026-05-15) — health check returns `{"message":"Bike Demand Prediction API is running"}`
+* [x] Shiny repo `model_prediction.R` — Cloud Run URL documented in `FASTAPI_URL` comment; env var already wired, no code change required
+* [ ] Add `GCP_SA_KEY` GitHub secret (service account JSON) to enable CI Job 5 auto-redeploy
 
 ### Phase 4 — Pub/Sub + Dataflow Pipeline
 * `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB=false` for local mode
@@ -108,4 +110,4 @@ Both repos form a single portfolio system. Track them together here.
 
 ## 🚀 Next Step
 
-**Phase 3 — Cloud Run Deployment (unblocked).** GCP billing is enabled (free tier) as of 2026-05-15. Run `gcloud run deploy bike-demand-api --image ghcr.io/deepan-mehta-analytics/bike-demand-ml-system:latest --platform managed --region us-central1 --allow-unauthenticated --memory 512Mi --port 8000`, then update Shiny repo `FASTAPI_URL` with the returned Cloud Run URL. Resume with: `"resume bike-demand-ml-system"`
+**Phase 3 complete — Cloud Run is live.** Next: add `GCP_SA_KEY` GitHub secret to wire CI Job 5 (auto-redeploy on merge), then begin Phase 4 (Pub/Sub + Dataflow pipeline). Cloud Run URL: `https://bike-demand-api-246440913351.us-central1.run.app`. Resume with: `"resume bike-demand-ml-system"`

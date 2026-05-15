@@ -79,7 +79,8 @@ def test_parse_message_invalid():                  # verify ParseMessage silentl
 # ── Test 5: DirectRunner end-to-end pipeline ──────────────────
 def test_windowed_pipeline_direct():               # verify the full pipeline runs on DirectRunner with test data
     import apache_beam as beam                     # import inside test to respect importorskip at module level
-    from apache_beam.testing.test_pipeline import TestPipeline  # test-friendly pipeline that uses DirectRunner
+    from apache_beam.testing.test_pipeline import TestPipeline        # DirectRunner test pipeline
+    from apache_beam.testing.util import assert_that                  # Beam-native PCollection assertion
 
     config = _load_config()                        # load real config from config/gcp_config.yaml
 
@@ -101,28 +102,22 @@ def test_windowed_pipeline_direct():               # verify the full pipeline ru
         }).encode(),
     ]
 
-    rows_written: list[dict] = []                  # list to capture BQ rows emitted by the pipeline
-
-    def _capture(row: dict) -> dict:               # passthrough that also appends to rows_written for assertion
-        rows_written.append(row)                   # capture the row before discarding it
-        return row                                 # return unchanged so beam.Map can pass it downstream
-
-    capture_sink = beam.Map(_capture)              # injected sink: captures rows without writing to BigQuery
+    def check_bq_rows(rows):                       # custom matcher: validates row count and NYC aggregation values
+        assert len(rows) == 2, f"Expected 2 BQ rows (nyc + dc), got {len(rows)}: {rows}"  # two unique (city, station) keys
+        cities = {r["city"] for r in rows}         # extract city slugs from all produced rows
+        assert "nyc" in cities, "nyc row missing"  # NYC station window row must be present
+        assert "dc"  in cities, "dc row missing"   # DC station window row must be present
+        nyc = next(r for r in rows if r["city"] == "nyc")  # find the NYC aggregated row
+        assert nyc["total_snapshots"] == 2,        "NYC should aggregate 2 snapshots"        # two snapshots in window
+        assert nyc["avg_bikes_available"] == 11.0, "NYC avg should be (12+10)/2 = 11.0"     # mean of 12 and 10
+        assert nyc["min_bikes_available"] == 10,   "NYC min should be 10"                   # minimum observed
+        assert nyc["max_bikes_available"] == 12,   "NYC max should be 12"                   # maximum observed
 
     with TestPipeline() as p:                      # DirectRunner test pipeline (synchronous, in-process)
-        build_pipeline(                            # wire the full DAG with test data and capture sink
+        bq_rows = build_pipeline(                  # wire the full DAG; returns pre-sink PCollection for assertion
             p,
             config,
-            test_messages=test_messages,           # 3 synthetic messages replace the Pub/Sub source
-            sink=capture_sink,                     # capture sink replaces WriteToBigQuery (no GCP call)
+            test_messages=test_messages,           # 3 synthetic messages replace the live Pub/Sub source
+            sink=beam.Map(lambda x: x),            # no-op sink: passes rows through without writing to BigQuery
         )
-    # Pipeline has run synchronously at this point; rows_written contains all BQ rows produced
-    assert len(rows_written) == 2                  # two unique (city, station_id) keys → two aggregated BQ rows
-    cities_in_output = {r["city"] for r in rows_written}  # extract city slugs from captured rows
-    assert "nyc" in cities_in_output               # NYC window row was produced
-    assert "dc"  in cities_in_output               # DC window row was produced
-    nyc_row = next(r for r in rows_written if r["city"] == "nyc")  # find the NYC aggregated row
-    assert nyc_row["total_snapshots"] == 2         # two NYC snapshots were aggregated in the window
-    assert nyc_row["avg_bikes_available"] == 11.0  # average of 12 and 10 bikes across the two snapshots
-    assert nyc_row["min_bikes_available"] == 10    # minimum bikes seen in the window
-    assert nyc_row["max_bikes_available"] == 12    # maximum bikes seen in the window
+        assert_that(bq_rows, check_bq_rows)        # Beam-native assertion; runs inside the pipeline execution context

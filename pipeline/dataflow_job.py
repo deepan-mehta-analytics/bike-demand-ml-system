@@ -34,10 +34,14 @@ BQ_SCHEMA = {                                      # BigQuery table schema for s
 }
 
 # ── DoFn: Parse Message ────────────────────────────────────────
-class ParseMessage(beam.DoFn):                     # Beam DoFn: parse raw message bytes into a snapshot dict
+class ParseMessage(beam.DoFn):                     # Beam DoFn: parse raw message bytes into individual snapshot dicts
     def process(self, element: bytes):             # element is raw UTF-8 JSON bytes from Pub/Sub or beam.Create
         try:                                       # attempt to decode and parse the message
-            yield json.loads(element.decode("utf-8"))  # decode bytes → parse JSON → emit dict downstream
+            parsed = json.loads(element.decode("utf-8"))  # decode bytes → JSON: list (batched) or dict (test msg)
+            if isinstance(parsed, list):           # batched format: JSON array of station records (1 msg per city)
+                yield from parsed                  # emit each station record individually downstream
+            else:                                  # single-record format: backwards-compatible with test messages
+                yield parsed                       # emit the single dict downstream
         except (json.JSONDecodeError, UnicodeDecodeError):  # malformed or non-UTF-8 message
             pass                                   # silently drop bad messages; do not crash the pipeline
 
@@ -111,7 +115,7 @@ def build_pipeline(
     config: dict[str, Any],
     test_messages: list[bytes] | None = None,
     sink: beam.PTransform | None = None,
-) -> None:                                         # wire the full Beam DAG; sink injection enables testing without GCP
+) -> beam.pvalue.PCollection:                      # wire the full Beam DAG; returns pre-sink PCollection for testing
     window_seconds = config["dataflow"]["window_seconds"]    # 5-min FixedWindow size from config
     project_id     = config["project_id"]                   # GCP project ID for BQ table reference
     bq_dataset     = config["bigquery"]["dataset"]           # BigQuery dataset name
@@ -135,9 +139,9 @@ def build_pipeline(
             write_disposition=BigQueryDisposition.WRITE_APPEND,       # append new window rows to table
         )
 
-    (
+    bq_rows = (
         source
-        | "ParseJSON"    >> beam.ParDo(ParseMessage())    # decode UTF-8 bytes → snapshot dict; drop malformed
+        | "ParseJSON"    >> beam.ParDo(ParseMessage())    # decode UTF-8 bytes → snapshot dict(s); drop malformed
         | "AddTimestamp" >> beam.Map(                     # attach event timestamp from the snapshot_time field
             lambda r: TimestampedValue(
                 r,
@@ -155,8 +159,9 @@ def build_pipeline(
         )
         | "AggPerWindow" >> beam.CombinePerKey(WindowedAgg())  # aggregate all snapshots per (city, station) per window
         | "FormatBQRow"  >> beam.ParDo(FormatBQRow())    # format windowed KV pair → BQ row dict with window timestamps
-        | "WriteToBQ"    >> sink                          # write rows to BigQuery (or injected test sink)
     )
+    bq_rows | "WriteToBQ" >> sink                        # write rows to BigQuery (or injected test sink)
+    return bq_rows                                       # return pre-sink PCollection so tests can assert_that on it
 
 # ── Entry Point ───────────────────────────────────────────────
 if __name__ == "__main__":                         # run the pipeline when executed via python -m pipeline.dataflow_job

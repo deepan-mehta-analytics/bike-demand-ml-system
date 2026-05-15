@@ -91,12 +91,14 @@ def _build_snapshot_tfl(
 def _publish(
     publisher: Any,
     topic_path: str,
+    city_key: str,
     records: list[dict[str, Any]],
-) -> None:                                         # publish a list of snapshot records to a Cloud Pub/Sub topic
-    for record in records:                         # iterate over each station snapshot record
-        data = json.dumps(record).encode("utf-8")  # serialise record to UTF-8 JSON bytes (Pub/Sub payload)
-        future = publisher.publish(topic_path, data)  # publish message; returns a concurrent.futures.Future
-        future.result()                            # block until the publish is acknowledged by the server
+) -> None:                                         # publish all station records for one city as a single Pub/Sub message
+    data = json.dumps(records).encode("utf-8")     # serialise the full station list as a JSON array (1 msg per city)
+    future = publisher.publish(                    # publish one message with a city attribute for filtering
+        topic_path, data, city=city_key,           # city attribute allows subscription-level filtering if needed
+    )
+    future.result()                                # block until the server acknowledges the single publish
 
 # ── Local Output (USE_PUBSUB=false path) ──────────────────────
 def _log_local(city: str, records: list[dict[str, Any]]) -> None:  # print records to stdout for local/test mode
@@ -146,7 +148,13 @@ def _run_pubsub_publish(
     topic_path = publisher.topic_path(project_id, topic_name)  # fully qualified topic resource name
     for city_key, records in results.items():      # iterate over each city's records
         if records:                                # only publish non-empty result sets
-            _publish(publisher, topic_path, records)  # send all records for this city to Pub/Sub
+            _publish(publisher, topic_path, city_key, records)  # send all records for this city as ONE message
+            logger.info(json.dumps({               # structured log confirming successful publish
+                "event":  "published",             # event type for log filtering
+                "city":   city_key,                # which city's snapshot was published
+                "count":  len(records),            # number of station records packed into this message
+                "topic":  topic_name,              # Pub/Sub topic name for traceability
+            }))
 
 # ── Poller Main Loop ──────────────────────────────────────────
 def run_poller() -> None:                          # main loop: poll all cities → publish or print → sleep

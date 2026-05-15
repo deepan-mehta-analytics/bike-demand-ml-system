@@ -90,7 +90,7 @@ Both repos form a single portfolio system. Track them together here.
 * [x] NotebookLM PKB audit complete — 5 documents in `notebooklm/` (gitignored)
 * [x] Cloud Run live: **https://bike-demand-api-246440913351.us-central1.run.app** (2026-05-15) — health check returns `{"message":"Bike Demand Prediction API is running"}`
 * [x] Shiny repo `model_prediction.R` — Cloud Run URL documented in `FASTAPI_URL` comment; env var already wired, no code change required
-* [ ] Add `GCP_SA_KEY` GitHub secret (service account JSON) to enable CI Job 5 auto-redeploy
+* [x] `GCP_SA_KEY` GitHub secret added — service account `github-ci-sa` (roles/run.developer + roles/artifactregistry.writer + roles/iam.serviceAccountUser); CI Job 5 is fully active
 
 ### Phase 4 — Pub/Sub + Dataflow Pipeline
 * `pipeline/gbfs_to_pubsub.py` — GBFS poller every 60s; `USE_PUBSUB=false` for local mode

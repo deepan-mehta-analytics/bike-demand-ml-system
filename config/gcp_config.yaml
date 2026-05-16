@@ -41,10 +41,11 @@ gbfs:
 # ── Vertex AI training job settings ──────────────────────────
 vertex_ai:
   # ⚠️  COST GUARD — DO NOT REMOVE.
-  # At e2-standard-2 rates (~$0.067/hr), 1800s caps exposure at $0.034 per run.
+  # At n1-highmem-2 rates (~$0.091/hr), 1800s caps exposure at $0.046 per run.
   # Without this, a hung container accrues cost indefinitely with no auto-stop.
+  # Note: e2-standard-2 is not supported by Vertex AI; n1-highmem-2 is the cheapest supported 2-vCPU type.
   job_timeout_seconds: 1800
-  machine_type: "e2-standard-2"       # cheapest machine with 8 GB RAM for multi-city RF sweep
+  machine_type: "n1-highmem-2"        # cheapest Vertex AI-supported 2-vCPU machine (13.75 GB RAM)
   replica_count: 1                    # single worker — no distributed training needed
   staging_bucket: "gs://bike-demand-staging"  # GCS bucket for Vertex AI staging artifacts
   container_image_uri: "us-central1-docker.pkg.dev/bike-demand-ml-system/bike-demand-repo/bike-demand-training:latest"  # GAR training image

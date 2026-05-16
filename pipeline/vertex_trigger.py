@@ -78,7 +78,7 @@ def trigger():
     # With sync=False the function returns immediately so that parameter is silently ignored.
     # Setting scheduling.timeout.seconds on the underlying gca_resource proto is the correct
     # way to tell Vertex AI to auto-cancel the container server-side after this many seconds.
-    # At e2-standard-2 rates (~$0.067/hr), 1800s caps the maximum cost at $0.034 per run.
+    # At n1-highmem-2 rates (~$0.091/hr), 1800s caps the maximum cost at $0.046 per run.
     # Without this line, a hung container accrues cost indefinitely until manually cancelled.
     job._gca_resource.job_spec.scheduling.timeout.seconds = va["job_timeout_seconds"]  # 1800s server-side kill
 

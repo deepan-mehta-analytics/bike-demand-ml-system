@@ -46,7 +46,11 @@ COPY data/processed/dc_bike_sharing.csv ./data/processed/
 # Vertex AI CustomJob mode does not use this port — it runs the CMD below directly.
 EXPOSE 8080
 
-# Default CMD: run the retraining job (Vertex AI CustomJob mode).
+# Default CMD: run the retraining job using -m so Python adds WORKDIR to sys.path.
+# Running as a module (-m) is required because retrain_job.py imports from models/,
+# which lives at /app/models/ — only in sys.path when Python is invoked from /app.
+# "python pipeline/retrain_job.py" sets sys.path to /app/pipeline/ instead and crashes
+# with ModuleNotFoundError: No module named 'models'.
 # Override at Cloud Run deploy time for the trigger service:
 #   --command uvicorn --args "pipeline.vertex_trigger:app,--host,0.0.0.0,--port,8080"
-CMD ["python", "pipeline/retrain_job.py"]
+CMD ["python", "-m", "pipeline.retrain_job"]

@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 5 code shipped — GCP provisioning + verification next (v4.0.0 in progress) | 🔄 In Progress | `fa2bc05` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 5 GCP provisioned — verification + v4.0.0 release next | 🔄 In Progress | `c0abb06` |
 | **bike_demand_prediction** | R Shiny dashboard | Phase 7F complete — GCP Stream tab live (v1.2.0); end-to-end verified 2026-05-16 | ✅ Done | `6dbe149` |
 
 ### Trained City Models
@@ -114,24 +114,35 @@ Both repos form a single portfolio system. Track them together here.
 * [x] GitHub release v3.0.0 published (2026-05-15)
 * Unlocks R Shiny Phase 7F ✅ — BigQuery table live
 
-### Phase 5 — Vertex AI + Experiment Tracking ← In Progress (v4.0.0 — commit fa2bc05)
+### Phase 5 — Vertex AI + Experiment Tracking ← In Progress (v4.0.0 — commit c0abb06)
 * **Code shipped 2026-05-16** — spec: `docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`
 * `pipeline/retrain_job.py` — 6-combo hyperparameter sweep per city; GCS-backed MLflow; RMSE gate (0.97); DRY_RUN mode
 * `pipeline/vertex_trigger.py` — Cloud Run HTTP handler; server-side billing cap via `_gca_resource.job_spec.scheduling.timeout.seconds`
 * `Dockerfile.training` — training + trigger container; bakes all 4 city CSVs
-* `requirements-vertex.txt` — google-cloud-aiplatform, mlflow, gcs pinned
+* `requirements-vertex.txt` — google-cloud-aiplatform, mlflow (pandas<3 constraint resolved), gcs pinned
 * `models/train.py` — chronological 80/20 split (correctness fix); MAE added to evaluation
-* `ci.yml` Job 6 — builds + pushes `bike-demand-training` image to GAR on merge to main
-* **Remaining:** GCP provisioning (vertex-sa IAM, Cloud Scheduler, Cloud Monitoring) + verification + v4.0.0 release
+* `ci.yml` Job 6 — builds + pushes `bike-demand-training` image to GAR on merge to main — ✅ green (run 25970193112)
+* **GCP provisioned (2026-05-17):**
+  - Vertex AI API enabled; `vertex-sa` SA created with `roles/aiplatform.user` + GCS objectAdmin
+  - `bike-demand-trigger` Cloud Run deployed at `https://bike-demand-trigger-246440913351.us-central1.run.app`
+  - Cloud Scheduler job `bike-demand-weekly-retrain` — every Sunday 02:00 UTC
+  - Cloud Monitoring: email channel `deepanmehta@live.com`; log-based alerts for job failure + running state
+* **Remaining:** Task 9 verification (DRY_RUN run, MLflow UI, manual Vertex AI job, Scheduler trigger) + v4.0.0 release
+* **Post-first-job:** Add `roles/artifactregistry.reader` to Vertex AI service agent `service-246440913351@gcp-sa-aiplatform.iam.gserviceaccount.com`
 
 ---
 
 ## 🚀 Next Step
 
-**v1.2.0 shipped in companion Shiny repo (2026-05-16) — Phase 7F complete.** The GCP Stream tab is live: `bigrquery` queries `bike_demand.station_snapshots` from the Shiny app, displaying 5-min windowed avg/min/max availability for NYC, DC, London, and Chicago.
+**Phase 5 GCP provisioning complete (2026-05-17).** Trigger service live, Cloud Scheduler wired, monitoring alerts active.
 
-**Next (Python repo):** Phase 5 GCP provisioning — enable Vertex AI API, create `vertex-sa` service account with IAM roles, deploy `bike-demand-trigger` Cloud Run service, create Cloud Scheduler weekly job, configure Cloud Monitoring email alerts. Then run the Task 9 verification sequence and publish GitHub release v4.0.0.
+**Next (Python repo):** Task 9 verification sequence — requires `GOOGLE_APPLICATION_CREDENTIALS` set to vertex-sa key:
+1. `DRY_RUN=true python pipeline/retrain_job.py` — 24 MLflow runs to GCS
+2. `mlflow ui --backend-store-uri gs://bike-demand-staging/mlflow` — browse experiments
+3. Manual `gcloud ai custom-jobs create` — submit one real Vertex AI job (~$0.034 max)
+4. `gcloud scheduler jobs run bike-demand-weekly-retrain` — trigger via Cloud Scheduler
+After verification: publish GitHub release v4.0.0.
 
-*Phase 5 code shipped 2026-05-16 — commit fa2bc05. Phase 4 (Pub/Sub + Dataflow) complete — v3.0.0 shipped 2026-05-15.*
+*Phase 5 GCP provisioned 2026-05-17 — commit c0abb06. Phase 4 (Pub/Sub + Dataflow) complete — v3.0.0 shipped 2026-05-15.*
 
 Resume with: `"resume bike-demand-ml-system — check workflow_status.md and pick up from the next pending action"`

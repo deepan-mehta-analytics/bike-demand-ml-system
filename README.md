@@ -3,7 +3,7 @@
 ## ⚡ Quick Summary
 This project is the **Python ML backend** in a two-repo portfolio system. It forecasts hourly bike-rental demand from weather and temporal signals, exposes the model through a FastAPI inference API, and is consumed by the companion [R Shiny dashboard](https://github.com/deepan-mehta-analytics/bike-demand-prediction) via `httr::POST /predict`. The architecture separates training from inference cleanly, persists model artifacts for reproducible deployment, and is containerised for local and cloud deployment.
 
-**v3.0.0 is live.** A real-time GBFS streaming pipeline polls 4 cities every 60 seconds, publishes to Cloud Pub/Sub, and aggregates 5-minute windows into BigQuery via Apache Beam Dataflow — end-to-end verified on 2026-05-15 with 6,624 NYC rows confirmed in `bike_demand.station_snapshots`. The FastAPI inference API runs on GCP Cloud Run at `https://bike-demand-api-246440913351.us-central1.run.app` with structured JSON logging and a Prometheus `/metrics` endpoint. Next: **v4.0.0** — Vertex AI + MLflow experiment tracking and automated retraining.
+**v3.0.0 is live.** A real-time GBFS streaming pipeline polls 4 cities every 60 seconds, publishes to Cloud Pub/Sub, and aggregates 5-minute windows into BigQuery via Apache Beam Dataflow — end-to-end verified on 2026-05-15 with 6,624 NYC rows confirmed in `bike_demand.station_snapshots`. The FastAPI inference API runs on GCP Cloud Run at `https://bike-demand-api-246440913351.us-central1.run.app` with structured JSON logging and a Prometheus `/metrics` endpoint. **v4.0.0 is in progress:** Phase 5 code is shipped and GCP is provisioned — a `bike-demand-trigger` Cloud Run service submits a 6-combo hyperparameter sweep to Vertex AI weekly, with GCS-backed MLflow experiment tracking and an RMSE gate before promoting models to Production. Verification and release are next.
 
 It is engineered as the next stage in a data analytics → data engineering → ML engineering trajectory: a model that ships to an API, not a notebook that ships to a screenshot.
 
@@ -58,6 +58,8 @@ It implements:
 | Containerisation | Docker + Docker Compose | python:3.11-slim image; all 4 city models baked into image at build time |
 | Testing | pytest + httpx + anyio | Unit tests (feature pipeline) + async integration tests (API) |
 | Linting / CI | ruff + GitHub Actions | Lint → test → docker build on every push to main |
+| Experiment Tracking | MLflow *(v4.0.0)* | GCS-backed run tracking, model registry, RMSE gate |
+| ML Platform | Vertex AI *(v4.0.0)* | Managed CustomJob for weekly hyperparameter sweep |
 
 ---
 
@@ -98,7 +100,9 @@ bike-demand-ml-system/
 ├── PROJECT-STATUS.md
 ├── requirements.txt                    ← pinned Python dependencies (inference API + tests)
 ├── requirements-pipeline.txt           ← pipeline-only deps (apache-beam, pubsub, pyyaml) — not in Docker image
+├── requirements-vertex.txt             ← training container deps (google-cloud-aiplatform, mlflow, pandas<3)
 ├── Dockerfile                          ← python:3.11-slim, non-root user, health check
+├── Dockerfile.training                 ← training + trigger container; bakes all 4 city CSVs; CMD runs retrain_job.py
 ├── docker-compose.yml                  ← local dev orchestration; models baked into image
 ├── .dockerignore                       ← excludes venv/, .git/, *.pkl from build context
 ├── .gitignore
@@ -148,7 +152,9 @@ bike-demand-ml-system/
 ├── pipeline/
 │   ├── __init__.py                     ← marks pipeline/ as a Python package
 │   ├── gbfs_to_pubsub.py               ← GBFS station poller → Pub/Sub topic (USE_PUBSUB=false for local output)
-│   └── dataflow_job.py                 ← Apache Beam: Pub/Sub → 5-min FixedWindows → BigQuery station_snapshots
+│   ├── dataflow_job.py                 ← Apache Beam: Pub/Sub → 5-min FixedWindows → BigQuery station_snapshots
+│   ├── retrain_job.py                  ← Vertex AI entry point: 6-combo sweep → MLflow → RMSE gate → Model Registry
+│   └── vertex_trigger.py               ← Cloud Run HTTP handler: POST /trigger → submit CustomJob async
 │
 ├── docs/
 │   └── superpowers/
@@ -418,7 +424,7 @@ See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL +
 | Algorithm | Random Forest Regressor (`n_estimators=100`, `random_state=42`) |
 | RMSE | **173.21** |
 | MSE | 30,002.93 |
-| Train / Test split | 80 / 20 (`random_state=42`) |
+| Train / Test split | Chronological 80/20 — oldest 80% → train, newest 20% → test |
 | Scaling | None (RF is scale-invariant — scaling removed from pipeline) |
 
 ### Top Feature Importances
@@ -445,7 +451,7 @@ See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL +
 | Algorithm | Random Forest Regressor (`n_estimators=100`, `random_state=42`) |
 | RMSE | **345.69** |
 | MSE | 119,501.86 |
-| Train / Test split | 80 / 20 (`random_state=42`) |
+| Train / Test split | Chronological 80/20 — oldest 80% → train, newest 20% → test |
 | Data source | BigQuery `new_york_citibike.citibike_trips` (2014–2018) + Open-Meteo historical weather |
 | Rows | 34,187 hourly observations |
 
@@ -472,7 +478,7 @@ See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL +
 |---|---|
 | Algorithm | Random Forest Regressor (`n_estimators=100`, `random_state=42`) |
 | RMSE | **97.47** |
-| Train / Test split | 80 / 20 (`random_state=42`) |
+| Train / Test split | Chronological 80/20 — oldest 80% → train, newest 20% → test |
 | Data source | Capital Bikeshare CSVs (2014–2018) + Open-Meteo historical weather |
 | Rows | 37,663 hourly observations |
 
@@ -529,7 +535,7 @@ The 7× spread between summer rush and middle-of-night confirms the model captur
 - ~~No CI/CD pipeline (GitHub Actions)~~ — lint → test → docker build on every push ✅
 - ~~No Dockerfile or containerised deployment~~ — `Dockerfile` + `docker-compose.yml` ✅
 - No hyperparameter tuning (GridSearch / Optuna)
-- No experiment tracking (MLflow / Vertex AI) — **Phase 5 design approved; implementation next** (spec: `docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`)
+- ~~No experiment tracking (MLflow / Vertex AI)~~ — **Phase 5 shipped:** `pipeline/retrain_job.py` weekly sweep + GCS-backed MLflow + RMSE gate; Vertex AI + Cloud Scheduler provisioned; verification + v4.0.0 release next ✅
 - No request authentication or rate-limiting on the API
 - ~~No structured logging or observability hooks~~ — structured JSON → Cloud Logging + Prometheus `/metrics` shipped in v2.1.0 ✅
 
@@ -589,17 +595,19 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 - [x] End-to-end verified — `bike_demand.station_snapshots`: nyc 6,624 rows, first_window 2026-05-15 13:05:00 UTC ✅
 - Unlocks companion Shiny repo Phase 7F (v1.2.0) ✅
 
-### Phase 5 — Vertex AI + Experiment Tracking ← **In Design (v4.0.0)**
+### Phase 5 — Vertex AI + Experiment Tracking ← **GCP Provisioned (v4.0.0 — verification next)**
 
-Design approved 2026-05-16. Spec: [`docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`](docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md)
+Spec: [`docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`](docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md)
 
-- [ ] `pipeline/retrain_job.py` — Vertex AI CustomJob: CSV → chronological split → 6-combo hyperparameter sweep → MLflow autolog → RMSE gate (3% threshold) → Model Registry promotion
-- [ ] `pipeline/vertex_trigger.py` — Cloud Run HTTP endpoint: POST → submit CustomJob async
-- [ ] `Dockerfile.training` + `requirements-vertex.txt` — training container image
-- [ ] `config/gcp_config.yaml` — extend with `vertex_ai:` (job_timeout_seconds: 1800) + `mlflow:` + `retraining:` blocks
-- [ ] `models/train.py` — chronological 80/20 split; MAE metric added
-- [ ] `.github/workflows/ci.yml` — Job 6: build + push training container to GAR
-- [ ] Cloud Monitoring email alerts — job failure + 25-min timeout warning
+- [x] `pipeline/retrain_job.py` — Vertex AI CustomJob: CSV → chronological split → 6-combo hyperparameter sweep → MLflow → RMSE gate (3% threshold) → Model Registry promotion
+- [x] `pipeline/vertex_trigger.py` — Cloud Run HTTP endpoint: POST → submit CustomJob async; server-side billing cap via `_gca_resource.job_spec.scheduling.timeout.seconds`
+- [x] `Dockerfile.training` + `requirements-vertex.txt` — training container image; CI Job 6 green ✅
+- [x] `config/gcp_config.yaml` — `vertex_ai:` (job_timeout_seconds: 1800) + `mlflow:` + `retraining:` blocks
+- [x] `models/train.py` — chronological 80/20 split (correctness fix); MAE metric added
+- [x] `.github/workflows/ci.yml` — Job 6: build + push `bike-demand-training` to GAR on merge to main
+- [x] GCP provisioned — Vertex AI API enabled; `vertex-sa` SA + IAM; `bike-demand-trigger` Cloud Run live; Cloud Scheduler (Sundays 02:00 UTC); Cloud Monitoring email alerts (log-based)
+- [ ] Task 9 verification — `DRY_RUN=true` local run, MLflow UI browse, manual Vertex AI job, Scheduler trigger test
+- [ ] Publish GitHub release v4.0.0
 
 ---
 

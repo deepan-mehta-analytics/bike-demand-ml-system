@@ -150,6 +150,11 @@ bike-demand-ml-system/
 │   ├── gbfs_to_pubsub.py               ← GBFS station poller → Pub/Sub topic (USE_PUBSUB=false for local output)
 │   └── dataflow_job.py                 ← Apache Beam: Pub/Sub → 5-min FixedWindows → BigQuery station_snapshots
 │
+├── docs/
+│   └── superpowers/
+│       └── specs/
+│           └── 2026-05-16-phase5-vertex-mlflow-design.md  ← Phase 5 approved design spec
+│
 └── venv/                               ← virtual environment (gitignored)
 ```
 
@@ -524,7 +529,7 @@ The 7× spread between summer rush and middle-of-night confirms the model captur
 - ~~No CI/CD pipeline (GitHub Actions)~~ — lint → test → docker build on every push ✅
 - ~~No Dockerfile or containerised deployment~~ — `Dockerfile` + `docker-compose.yml` ✅
 - No hyperparameter tuning (GridSearch / Optuna)
-- No experiment tracking (MLflow / Weights & Biases)
+- No experiment tracking (MLflow / Vertex AI) — **Phase 5 design approved; implementation next** (spec: `docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`)
 - No request authentication or rate-limiting on the API
 - ~~No structured logging or observability hooks~~ — structured JSON → Cloud Logging + Prometheus `/metrics` shipped in v2.1.0 ✅
 
@@ -584,10 +589,17 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 - [x] End-to-end verified — `bike_demand.station_snapshots`: nyc 6,624 rows, first_window 2026-05-15 13:05:00 UTC ✅
 - Unlocks companion Shiny repo Phase 7F (v1.2.0) ✅
 
-### Phase 5 — Vertex AI + Experiment Tracking ← **Priority 4 (v4.0.0 — after streaming)**
+### Phase 5 — Vertex AI + Experiment Tracking ← **In Design (v4.0.0)**
 
-- [ ] MLflow `autolog()` in `models/train.py`; register model if RMSE improves
-- [ ] `pipeline/retrain_job.py` — BigQuery → feature engineering → retrain → log → register
+Design approved 2026-05-16. Spec: [`docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`](docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md)
+
+- [ ] `pipeline/retrain_job.py` — Vertex AI CustomJob: CSV → chronological split → 6-combo hyperparameter sweep → MLflow autolog → RMSE gate (3% threshold) → Model Registry promotion
+- [ ] `pipeline/vertex_trigger.py` — Cloud Run HTTP endpoint: POST → submit CustomJob async
+- [ ] `Dockerfile.training` + `requirements-vertex.txt` — training container image
+- [ ] `config/gcp_config.yaml` — extend with `vertex_ai:` (job_timeout_seconds: 1800) + `mlflow:` + `retraining:` blocks
+- [ ] `models/train.py` — chronological 80/20 split; MAE metric added
+- [ ] `.github/workflows/ci.yml` — Job 6: build + push training container to GAR
+- [ ] Cloud Monitoring email alerts — job failure + 25-min timeout warning
 
 ---
 

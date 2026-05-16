@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 4 complete — GBFS→Pub/Sub→Dataflow→BigQuery end-to-end verified (v3.0.0) | ✅ Done | `7ef3aad` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 5 design approved — spec written, implementation plan next (v4.0.0 in design) | 🔄 In Design | `53b7956` |
 | **bike_demand_prediction** | R Shiny dashboard | Phase 7F complete — GCP Stream tab live (v1.2.0); end-to-end verified 2026-05-16 | ✅ Done | `6dbe149` |
 
 ### Trained City Models
@@ -114,10 +114,15 @@ Both repos form a single portfolio system. Track them together here.
 * [x] GitHub release v3.0.0 published (2026-05-15)
 * Unlocks R Shiny Phase 7F ✅ — BigQuery table live
 
-### Phase 5 — Vertex AI + Experiment Tracking ← Priority 4 (v4.0.0)
-* MLflow `autolog()` in `models/train.py`; register model if RMSE improves vs current baseline
-* `pipeline/retrain_job.py` — BigQuery → feature engineering → retrain → log → register best model
-* Sequenced after Phase 4 — retrain pipeline benefits from streaming data produced by Dataflow
+### Phase 5 — Vertex AI + Experiment Tracking ← In Design (v4.0.0)
+* **Design approved 2026-05-16** — spec: `docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`
+* Architecture: Cloud Scheduler → Cloud Run trigger → Vertex AI CustomJob (e2-standard-2, 1800s timeout hard cap)
+* MLflow tracking URI: `gs://bike-demand-staging/mlflow` (GCS-backed, no server required)
+* Data source: existing CSV datasets (chronological 80/20 split — corrects random split in current train.py)
+* Hyperparameter sweep: 6 combos per city (n_estimators × max_features) per run
+* RMSE gate: 3% improvement threshold (0.97 multiplier) to promote Staging → Production
+* Cost: ~$0.01–0.02/run; < $0.25/month at weekly cadence
+* Cloud Monitoring email alerts: FAILED state + 25-min timeout warning (both free)
 
 ---
 

@@ -38,7 +38,7 @@ app = FastAPI()                                   # FastAPI application instance
 def _load_config() -> dict:                       # returns parsed YAML as a Python dict
     """Load gcp_config.yaml — path resolved at call time to avoid module-level OS path issues."""
     config_path = Path(__file__).parent.parent / "config" / "gcp_config.yaml"  # resolve from this file
-    with open(config_path) as f:                  # open the config file for reading
+    with open(config_path, encoding="utf-8") as f:  # utf-8: config has ⚠️/— chars; cp1252 can't decode them
         return yaml.safe_load(f)                  # parse YAML to Python dict
 
 

@@ -48,7 +48,7 @@ DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"  # read env var; defau
 def _load_config() -> dict:                       # returns parsed YAML as a Python dict
     """Load gcp_config.yaml from the repo root config/ directory."""
     config_path = Path(__file__).parent.parent / "config" / "gcp_config.yaml"  # resolve from this file's location
-    with open(config_path) as f:                  # open config file for reading
+    with open(config_path, encoding="utf-8") as f:  # utf-8: config has ⚠️/— chars; cp1252 can't decode them
         return yaml.safe_load(f)                  # parse YAML to Python dict and return
 
 

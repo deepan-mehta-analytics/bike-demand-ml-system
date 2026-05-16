@@ -1,0 +1,52 @@
+# =============================================================================
+# Dockerfile.training
+# -----------------------------------------------------------------------------
+# Training container image for Vertex AI CustomJob (bike-demand-ml-system).
+# Also used as the Cloud Run trigger service image with CMD overridden at deploy.
+#
+# Build:   docker build -f Dockerfile.training -t bike-demand-training:local .
+# Train:   docker run bike-demand-training:local
+# Trigger: gcloud run deploy bike-demand-trigger \
+#            --image <image> --command uvicorn \
+#            --args "pipeline.vertex_trigger:app,--host,0.0.0.0,--port,8080"
+# =============================================================================
+
+# Python 3.11 slim — same base as the inference Dockerfile for consistency.
+FROM python:3.11-slim
+
+# Install system dependencies required by scikit-learn native extensions.
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory — all relative paths in retrain_job.py resolve from here.
+WORKDIR /app
+
+# Copy requirements first to exploit Docker layer caching.
+# This layer only re-runs when requirements-vertex.txt changes, not when source changes.
+COPY requirements-vertex.txt .
+
+# Install all Python dependencies from the pinned requirements file.
+RUN pip install --no-cache-dir -r requirements-vertex.txt
+
+# Copy source modules needed by the training and trigger scripts.
+COPY models/ ./models/
+COPY pipeline/ ./pipeline/
+COPY config/ ./config/
+
+# Copy Seoul raw CSV — baked into image; Vertex AI job needs no GCS data fetch.
+COPY data/raw/seoul/ ./data/raw/seoul/
+
+# Copy processed CSVs for London, NYC, and DC — prepared and committed to the repo.
+COPY data/processed/london_bike_sharing.csv ./data/processed/
+COPY data/processed/nyc_bike_sharing.csv ./data/processed/
+COPY data/processed/dc_bike_sharing.csv ./data/processed/
+
+# Expose port 8080 for Cloud Run trigger mode.
+# Vertex AI CustomJob mode does not use this port — it runs the CMD below directly.
+EXPOSE 8080
+
+# Default CMD: run the retraining job (Vertex AI CustomJob mode).
+# Override at Cloud Run deploy time for the trigger service:
+#   --command uvicorn --args "pipeline.vertex_trigger:app,--host,0.0.0.0,--port,8080"
+CMD ["python", "pipeline/retrain_job.py"]

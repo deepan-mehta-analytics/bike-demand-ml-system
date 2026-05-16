@@ -37,3 +37,41 @@ gbfs:
     chicago:                           # Divvy Bikes Chicago
       name: Chicago                    # human-readable city name
       url: "https://gbfs.divvybikes.com/gbfs/en/station_status.json"  # GBFS v2 station_status endpoint
+
+# ── Vertex AI training job settings ──────────────────────────
+vertex_ai:
+  # ⚠️  COST GUARD — DO NOT REMOVE.
+  # At e2-standard-2 rates (~$0.067/hr), 1800s caps exposure at $0.034 per run.
+  # Without this, a hung container accrues cost indefinitely with no auto-stop.
+  job_timeout_seconds: 1800
+  machine_type: "e2-standard-2"       # cheapest machine with 8 GB RAM for multi-city RF sweep
+  replica_count: 1                    # single worker — no distributed training needed
+  staging_bucket: "gs://bike-demand-staging"  # GCS bucket for Vertex AI staging artifacts
+  container_image_uri: "us-central1-docker.pkg.dev/bike-demand-ml-system/bike-demand-repo/bike-demand-training:latest"  # GAR training image
+  region: "us-central1"              # matches existing Cloud Run / GAR deployment region
+
+# ── MLflow experiment tracking settings ──────────────────────
+mlflow:
+  # GCS-backed tracking — no server required. Browse locally with:
+  # mlflow ui --backend-store-uri gs://bike-demand-staging/mlflow
+  tracking_uri: "gs://bike-demand-staging/mlflow"  # GCS-backed MLflow store (free, no server)
+  experiment_prefix: "bike-demand"   # → experiments named "bike-demand-seoul", "bike-demand-london" etc.
+
+# ── Automated retraining config ───────────────────────────────
+retraining:
+  # Minimum RMSE reduction required to promote a model from Staging to Production.
+  # 3% is above the RF noise floor (~1-2%) — represents genuine improvement, not random variation.
+  # Do not lower below 0.97 — risks promoting noise as signal.
+  rmse_improvement_threshold: 0.97
+  cities:
+    - name: "seoul"                   # city identifier — matches artifact directory name
+      data_path: "data/raw/seoul/seoul_bike_sharing.csv"  # UCI Seoul Bike Sharing dataset
+    - name: "london"                  # city identifier
+      data_path: "data/processed/london_bike_sharing.csv"  # Kaggle london_merged.csv (prepared)
+    - name: "nyc"                     # city identifier
+      data_path: "data/processed/nyc_bike_sharing.csv"   # BigQuery + Open-Meteo join (prepared)
+    - name: "dc"                      # city identifier
+      data_path: "data/processed/dc_bike_sharing.csv"    # Capital Bikeshare + Open-Meteo join (prepared)
+  param_grid:
+    n_estimators: [100, 200, 300]     # tree count options — 6 combos total (3 × 2)
+    max_features: ["sqrt", "log2"]    # feature sampling strategies — sqrt≈7 features, log2≈5 features

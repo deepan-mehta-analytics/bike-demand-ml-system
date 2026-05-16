@@ -53,9 +53,13 @@ vertex_ai:
 
 # ── MLflow experiment tracking settings ──────────────────────
 mlflow:
-  # GCS-backed tracking — no server required. Browse locally with:
-  # mlflow ui --backend-store-uri gs://bike-demand-staging/mlflow
-  tracking_uri: "gs://bike-demand-staging/mlflow"  # GCS-backed MLflow store (free, no server)
+  # MLflow 2.x does not support gs:// as a direct tracking URI — only as an artifact store.
+  # retrain_job.py uses SQLite (/tmp/mlflow.db) for tracking, uploaded to GCS at job end.
+  # To browse experiments locally:
+  #   gsutil cp gs://bike-demand-staging/mlflow/mlflow.db /tmp/mlflow.db
+  #   mlflow ui --backend-store-uri sqlite:////tmp/mlflow.db
+  gcs_base: "gs://bike-demand-staging/mlflow"  # GCS base path for tracking DB + artifacts
+  experiment_prefix: "bike-demand"  # → experiments named "bike-demand-seoul", "bike-demand-london" etc.
   experiment_prefix: "bike-demand"   # → experiments named "bike-demand-seoul", "bike-demand-london" etc.
 
 # ── Automated retraining config ───────────────────────────────

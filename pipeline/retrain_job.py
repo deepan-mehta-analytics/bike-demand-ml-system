@@ -8,8 +8,18 @@
 # Runs inside the bike-demand-training Docker container on Vertex AI.
 # Also runnable locally with DRY_RUN=true for zero-cost development.
 #
+# MLflow tracking strategy (production):
+#   - Tracking store: SQLite at /tmp/mlflow.db (local during job)
+#   - Artifact store: GCS per-experiment artifact_location (persistent)
+#   - At job start: download mlflow.db from GCS if it exists (preserves
+#     experiment history and RMSE gate state across weekly runs)
+#   - At job end: upload mlflow.db to GCS (so next run inherits state)
+#   MLflow 2.x does not support gs:// directly as a tracking URI — only as
+#   an artifact store via gcsfs/fsspec. SQLite + GCS upload is the correct
+#   production pattern for Vertex AI CustomJobs with no persistent server.
+#
 # Usage (local dry-run — requires GOOGLE_APPLICATION_CREDENTIALS):
-#   DRY_RUN=true python pipeline/retrain_job.py
+#   DRY_RUN=true python -m pipeline.retrain_job
 #
 # Usage (Vertex AI — triggered by vertex_trigger.py):
 #   Submitted as a CustomJob; entry point CMD in Dockerfile.training.
@@ -34,9 +44,14 @@ from models.features import get_feature_target    # feature/target split with OH
 from models.features import load_data             # CSV → DataFrame loader
 
 # ── Dry-run guard ─────────────────────────────────────────────
-# DRY_RUN=true: runs entire sweep locally, logs to GCS MLflow URI, zero Vertex AI cost.
-# Use this for local development and verifying MLflow connectivity before submitting real jobs.
+# DRY_RUN=true: runs entire sweep locally, logs to local mlruns/, zero Vertex AI cost.
+# Use this for local development and verifying logic before submitting real jobs.
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"  # read env var; default to production mode
+
+# ── Tracking constants (production mode) ─────────────────────
+LOCAL_TRACKING_DB  = "/tmp/mlflow.db"                        # SQLite file path on the Vertex AI worker
+GCS_TRACKING_DB    = "gs://bike-demand-staging/mlflow/mlflow.db"  # persisted DB between weekly runs
+GCS_ARTIFACT_ROOT  = "gs://bike-demand-staging/mlflow/artifacts"  # model artifacts go here (permanent)
 
 
 # ── Config loader ─────────────────────────────────────────────
@@ -50,6 +65,44 @@ def _load_config() -> dict:                       # returns parsed YAML as a Pyt
     config_path = Path(__file__).parent.parent / "config" / "gcp_config.yaml"  # resolve from this file's location
     with open(config_path, encoding="utf-8") as f:  # utf-8: config has ⚠️/— chars; cp1252 can't decode them
         return yaml.safe_load(f)                  # parse YAML to Python dict and return
+
+
+# ── Tracking store init ───────────────────────────────────────
+def _init_tracking() -> None:
+    """Configure MLflow tracking URI. DRY_RUN uses local mlruns/; production uses SQLite + GCS."""
+    if DRY_RUN:                                   # offline mode — no GCS credentials needed
+        mlflow.set_tracking_uri("mlruns/")        # local filesystem store under cwd/mlruns/
+        print("[DRY_RUN] MLflow redirected to local mlruns/ — no GCS credentials required")
+        return                                    # no GCS DB to download
+
+    # Production: download existing tracking DB from GCS so RMSE history is available
+    from google.cloud import storage as gcs_storage  # GCS client (deferred import: not available in DRY_RUN)
+    gcs_client = gcs_storage.Client()             # initialise GCS client using Application Default Credentials
+    bucket_name = "bike-demand-staging"           # GCS bucket holding the tracking DB
+    blob_path   = "mlflow/mlflow.db"              # path within the bucket for the SQLite file
+    bucket      = gcs_client.bucket(bucket_name)  # bucket reference (no API call yet)
+    blob        = bucket.blob(blob_path)          # blob reference for the tracking DB file
+
+    if blob.exists():                             # existing DB found — download to restore history
+        blob.download_to_filename(LOCAL_TRACKING_DB)   # copy GCS file to local worker disk
+        print(f"[GCS] Downloaded mlflow.db from gs://{bucket_name}/{blob_path}")
+    else:                                         # first run — no prior history, start fresh
+        print("[GCS] No existing mlflow.db — starting fresh tracking database")
+
+    mlflow.set_tracking_uri(f"sqlite:///{LOCAL_TRACKING_DB}")  # point MLflow at local SQLite file
+
+
+# ── Tracking store upload ─────────────────────────────────────
+def _upload_tracking() -> None:
+    """Upload the local SQLite tracking DB to GCS so the next job inherits experiment history."""
+    if DRY_RUN:                                   # DRY_RUN: nothing to upload
+        return
+    from google.cloud import storage as gcs_storage  # deferred import — not available in DRY_RUN
+    gcs_client  = gcs_storage.Client()            # initialise GCS client
+    bucket      = gcs_client.bucket("bike-demand-staging")   # target bucket
+    blob        = bucket.blob("mlflow/mlflow.db")             # target blob for the tracking DB
+    blob.upload_from_filename(LOCAL_TRACKING_DB)  # overwrite the GCS copy with the updated local file
+    print(f"[GCS] Uploaded mlflow.db to {GCS_TRACKING_DB}")
 
 
 # ── Registry helpers ──────────────────────────────────────────
@@ -75,14 +128,7 @@ def retrain_all_cities() -> None:
     """Sweep hyperparameters for all 4 cities, log to MLflow, gate on RMSE, update the model registry."""
     cfg = _load_config()                          # load full GCP + retraining config from YAML
 
-    # DRY_RUN redirects MLflow to a local mlruns/ directory so the entire sweep can be
-    # run and inspected offline without GCS credentials or Vertex AI cost.
-    # Production mode (DRY_RUN=false) logs to GCS so Vertex AI jobs persist across runs.
-    if DRY_RUN:                                   # offline mode: no GCS credentials needed
-        mlflow.set_tracking_uri("mlruns/")        # local filesystem store under cwd/mlruns/
-        print("[DRY_RUN] MLflow redirected to local mlruns/ — no GCS credentials required")
-    else:                                         # production mode: GCS-backed store
-        mlflow.set_tracking_uri(cfg["mlflow"]["tracking_uri"])  # gs://bike-demand-staging/mlflow
+    _init_tracking()                              # configure MLflow tracking URI (local SQLite or mlruns/)
     client = MlflowClient()                       # initialise MLflow model registry client
 
     cities     = cfg["retraining"]["cities"]                # list of {name, data_path} dicts
@@ -96,7 +142,21 @@ def retrain_all_cities() -> None:
         data_path  = city_cfg["data_path"]        # e.g. "data/raw/seoul/seoul_bike_sharing.csv"
         model_name = f"{prefix}-{city_name}"      # MLflow experiment + registry name e.g. "bike-demand-seoul"
 
-        mlflow.set_experiment(model_name)         # create experiment if it does not already exist
+        # ── Create experiment with GCS artifact location ──────
+        # In production, each experiment's artifact_location points to GCS so model .pkl
+        # files persist permanently — even though tracking metadata is in ephemeral SQLite.
+        # In DRY_RUN, artifact_location is None (mlruns/ handles it locally).
+        existing_exp = mlflow.get_experiment_by_name(model_name)  # check if experiment already exists
+        if existing_exp is None:                  # first time this experiment is created
+            artifact_location = (                 # GCS path for model artifacts (production only)
+                f"{GCS_ARTIFACT_ROOT}/{model_name}" if not DRY_RUN else None
+            )
+            mlflow.create_experiment(             # create with explicit artifact_location
+                model_name,                       # experiment name (also used as model registry name)
+                artifact_location=artifact_location,  # None → mlruns/ default; GCS path → cloud storage
+            )
+
+        mlflow.set_experiment(model_name)         # activate this experiment for subsequent runs
 
         best_rmse    = float("inf")               # lowest RMSE seen across all combos this sweep
         best_run_id  = None                       # MLflow run_id of the best-performing combo
@@ -128,7 +188,7 @@ def retrain_all_cities() -> None:
                     n_estimators=n_est,           # number of trees in the forest
                     max_features=max_feat,        # feature sampling strategy per split node
                     random_state=42,              # fixed seed — reproducible tree splits across runs
-                    n_jobs=-1,                    # use all available vCPUs on e2-standard-2 (2 cores)
+                    n_jobs=-1,                    # use all available vCPUs on n1-highmem-2 (2 cores)
                 )
                 model.fit(X_train, y_train)       # train on the older 80% of data
 
@@ -140,7 +200,7 @@ def retrain_all_cities() -> None:
                 mlflow.log_metric("test_rmse", rmse)         # primary gate metric — used for Staging→Production
                 mlflow.log_metric("test_mae",  mae)          # secondary metric — more interpretable operationally
                 mlflow.log_metric("test_mse",  mse)          # raw MSE for completeness
-                mlflow.sklearn.log_model(model, "model")     # log full model artifact to GCS
+                mlflow.sklearn.log_model(model, "model")     # log full model artifact (GCS in production)
 
                 # Log feature importances — drift signal: if HOUR drops from top, check data pipeline
                 for feat, imp in zip(X_train.columns, model.feature_importances_):
@@ -164,16 +224,19 @@ def retrain_all_cities() -> None:
 
         if prod_rmse is None:                    # first retraining cycle — no Production exists yet
             _promote_to_production(client, model_name, best_version)  # auto-promote without threshold
-            print(f"  → First run: promoted v{best_version} to Production (RMSE {best_rmse:.2f})")
+            print(f"  -> First run: promoted v{best_version} to Production (RMSE {best_rmse:.2f})")
 
-        elif best_rmse < prod_rmse * threshold:  # genuine ≥3% improvement — above RF noise floor
+        elif best_rmse < prod_rmse * threshold:  # genuine >=3% improvement — above RF noise floor
             _promote_to_production(client, model_name, best_version)  # archive old, promote new
             pct = (prod_rmse - best_rmse) / prod_rmse * 100   # improvement percentage for logging
-            print(f"  → Promoted v{best_version} to Production (+{pct:.1f}% better: {best_rmse:.2f} vs {prod_rmse:.2f})")
+            print(f"  -> Promoted v{best_version} to Production (+{pct:.1f}% better: {best_rmse:.2f} vs {prod_rmse:.2f})")
 
         else:                                    # improvement below 3% threshold — stay in Staging
             gap = (best_rmse - prod_rmse) / prod_rmse * 100   # gap to threshold (as %)
-            print(f"  → No promotion: RMSE {best_rmse:.2f} vs Production {prod_rmse:.2f} (need 3%, got {gap:+.1f}%)")
+            print(f"  -> No promotion: RMSE {best_rmse:.2f} vs Production {prod_rmse:.2f} (need 3%, got {gap:+.1f}%)")
+
+    # ── Upload tracking DB to GCS ─────────────────────────────
+    _upload_tracking()                            # persist SQLite tracking DB so next job inherits history
 
 
 # ── Entry point ───────────────────────────────────────────────

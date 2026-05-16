@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 5 GCP provisioned — verification + v4.0.0 release next | 🔄 In Progress | `2b54a63` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 5 (Vertex AI + MLflow) DONE — v4.0.0 released | ✅ Done | `d5c2a54` |
 | **bike_demand_prediction** | R Shiny dashboard | Phase 7F complete — GCP Stream tab live (v1.2.0); end-to-end verified 2026-05-16 | ✅ Done | `6dbe149` |
 
 ### Trained City Models
@@ -30,7 +30,7 @@ Both repos form a single portfolio system. Track them together here.
 | ~~1~~ | bike-demand-ml-system | ~~Phase 6 — Observability~~ | ~~v2.1.0~~ | **✅ Shipped** |
 | ~~1~~ | bike-demand-ml-system | ~~Phase 4 — Pub/Sub + Dataflow~~ | ~~v3.0.0~~ | **✅ Shipped** |
 | ~~1~~ | bike_demand_prediction | ~~Phase 7F — GCP Streaming Dashboard~~ | ~~v1.2.0~~ | **✅ Shipped (2026-05-16)** |
-| **3** | bike-demand-ml-system | Phase 5 — Vertex AI + MLflow | v4.0.0 | Best after streaming data exists |
+| ~~3~~ | bike-demand-ml-system | ~~Phase 5 — Vertex AI + MLflow~~ | ~~v4.0.0~~ | **✅ Shipped (2026-05-17)** |
 | **4** | bike_demand_prediction | Backlog — Paris/Chicago models | v1.3.0 | Data sourcing required |
 | **5** | Both | Backlog — testthat / pytest | — | None |
 | **6** | bike_demand_prediction | Backlog — Seoul GBFS | — | External API key |
@@ -73,10 +73,8 @@ Both repos form a single portfolio system. Track them together here.
 
 ## ⚠️ Known Limitations
 
-* No hyperparameter tuning — single fixed RF config (`n_estimators=100`, `random_state=42`)
-* No experiment tracking — no MLflow / Vertex AI integration
 * No API authentication or rate-limiting
-* No drift monitoring on inference inputs
+* No drift monitoring on inference inputs — feature importances are logged to MLflow each run but no automated alert threshold
 * Paris and Chicago have no trained models — service falls back to Seoul (proxy only)
 * NYC RMSE (345.69) is higher due to larger absolute trip volumes; adding weather data beyond
   temperature/humidity (e.g. actual visibility, not Open-Meteo zeros) would likely reduce it
@@ -114,20 +112,21 @@ Both repos form a single portfolio system. Track them together here.
 * [x] GitHub release v3.0.0 published (2026-05-15)
 * Unlocks R Shiny Phase 7F ✅ — BigQuery table live
 
-### Phase 5 — Vertex AI + Experiment Tracking ← In Progress (v4.0.0 — commit c0abb06)
+### Phase 5 — Vertex AI + Experiment Tracking ✅ Done (v4.0.0 — commit d5c2a54)
 * **Code shipped 2026-05-16** — spec: `docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`
-* `pipeline/retrain_job.py` — 6-combo hyperparameter sweep per city; GCS-backed MLflow; RMSE gate (0.97); DRY_RUN mode
-* `pipeline/vertex_trigger.py` — Cloud Run HTTP handler; server-side billing cap via `_gca_resource.job_spec.scheduling.timeout.seconds`
-* `Dockerfile.training` — training + trigger container; bakes all 4 city CSVs
-* `requirements-vertex.txt` — google-cloud-aiplatform, mlflow (pandas<3 constraint resolved), gcs pinned
+* `pipeline/retrain_job.py` — 6-combo hyperparameter sweep per city; SQLite+GCS MLflow tracking; RMSE gate (0.97); DRY_RUN mode
+* `pipeline/vertex_trigger.py` — Cloud Run HTTP handler; `aiplatform_v1.JobServiceClient` with proto; server-side billing cap `scheduling.timeout: 1800s`
+* `Dockerfile.training` — training + trigger container; `python -m pipeline.retrain_job` CMD (sys.path fix); bakes all 4 city CSVs
+* `requirements-vertex.txt` — google-cloud-aiplatform, mlflow (pandas<3 constraint resolved), gcsfs for artifact store
 * `models/train.py` — chronological 80/20 split (correctness fix); MAE added to evaluation
 * `ci.yml` Job 6 — builds + pushes `bike-demand-training` image to GAR on merge to main — ✅ green (run 25970193112)
 * **GCP provisioned (2026-05-17):**
-  - Vertex AI API enabled; `vertex-sa` SA created with `roles/aiplatform.user` + GCS objectAdmin
+  - Vertex AI API enabled; `vertex-sa` SA with `roles/aiplatform.user` + GCS objectAdmin; Vertex AI service agent granted `roles/artifactregistry.reader`
   - `bike-demand-trigger` Cloud Run deployed at `https://bike-demand-trigger-246440913351.us-central1.run.app`
   - Cloud Scheduler job `bike-demand-weekly-retrain` — every Sunday 02:00 UTC
   - Cloud Monitoring: email channel `deepanmehta@live.com`; log-based alerts for job failure + running state
-* **Remaining:** Task 9 verification (DRY_RUN run, MLflow UI, manual Vertex AI job, Scheduler trigger) + v4.0.0 release
+* **Verification complete (2026-05-17):** Vertex AI job ran ~10 min; all 4 cities registered in MLflow Production; `gs://bike-demand-staging/mlflow/mlflow.db` uploaded; `gs://bike-demand-staging/mlflow/artifacts/` has 47 model.pkl files across 4 city dirs
+* GitHub release v4.0.0 published (2026-05-17)
 * **Post-first-job:** Add `roles/artifactregistry.reader` to Vertex AI service agent `service-246440913351@gcp-sa-aiplatform.iam.gserviceaccount.com`
 
 ---

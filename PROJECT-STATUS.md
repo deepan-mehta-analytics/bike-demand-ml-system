@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 5 design approved — spec written, implementation plan next (v4.0.0 in design) | 🔄 In Design | `0d25652` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 5 code shipped — GCP provisioning + verification next (v4.0.0 in progress) | 🔄 In Progress | `fa2bc05` |
 | **bike_demand_prediction** | R Shiny dashboard | Phase 7F complete — GCP Stream tab live (v1.2.0); end-to-end verified 2026-05-16 | ✅ Done | `6dbe149` |
 
 ### Trained City Models
@@ -114,15 +114,15 @@ Both repos form a single portfolio system. Track them together here.
 * [x] GitHub release v3.0.0 published (2026-05-15)
 * Unlocks R Shiny Phase 7F ✅ — BigQuery table live
 
-### Phase 5 — Vertex AI + Experiment Tracking ← In Design (v4.0.0)
-* **Design approved 2026-05-16** — spec: `docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`
-* Architecture: Cloud Scheduler → Cloud Run trigger → Vertex AI CustomJob (e2-standard-2, 1800s timeout hard cap)
-* MLflow tracking URI: `gs://bike-demand-staging/mlflow` (GCS-backed, no server required)
-* Data source: existing CSV datasets (chronological 80/20 split — corrects random split in current train.py)
-* Hyperparameter sweep: 6 combos per city (n_estimators × max_features) per run
-* RMSE gate: 3% improvement threshold (0.97 multiplier) to promote Staging → Production
-* Cost: ~$0.01–0.02/run; < $0.25/month at weekly cadence
-* Cloud Monitoring email alerts: FAILED state + 25-min timeout warning (both free)
+### Phase 5 — Vertex AI + Experiment Tracking ← In Progress (v4.0.0 — commit fa2bc05)
+* **Code shipped 2026-05-16** — spec: `docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`
+* `pipeline/retrain_job.py` — 6-combo hyperparameter sweep per city; GCS-backed MLflow; RMSE gate (0.97); DRY_RUN mode
+* `pipeline/vertex_trigger.py` — Cloud Run HTTP handler; server-side billing cap via `_gca_resource.job_spec.scheduling.timeout.seconds`
+* `Dockerfile.training` — training + trigger container; bakes all 4 city CSVs
+* `requirements-vertex.txt` — google-cloud-aiplatform, mlflow, gcs pinned
+* `models/train.py` — chronological 80/20 split (correctness fix); MAE added to evaluation
+* `ci.yml` Job 6 — builds + pushes `bike-demand-training` image to GAR on merge to main
+* **Remaining:** GCP provisioning (vertex-sa IAM, Cloud Scheduler, Cloud Monitoring) + verification + v4.0.0 release
 
 ---
 
@@ -130,8 +130,8 @@ Both repos form a single portfolio system. Track them together here.
 
 **v1.2.0 shipped in companion Shiny repo (2026-05-16) — Phase 7F complete.** The GCP Stream tab is live: `bigrquery` queries `bike_demand.station_snapshots` from the Shiny app, displaying 5-min windowed avg/min/max availability for NYC, DC, London, and Chicago.
 
-**Next priority (Python repo):** Phase 5 — Vertex AI + MLflow experiment tracking (v4.0.0). Or backlog: train Paris/Chicago RF models to replace Seoul proxy in the Shiny dashboard.
+**Next (Python repo):** Phase 5 GCP provisioning — enable Vertex AI API, create `vertex-sa` service account with IAM roles, deploy `bike-demand-trigger` Cloud Run service, create Cloud Scheduler weekly job, configure Cloud Monitoring email alerts. Then run the Task 9 verification sequence and publish GitHub release v4.0.0.
 
-*Phase 4 (Pub/Sub + Dataflow) complete — v3.0.0 shipped on 2026-05-15. Shiny v1.2.0 shipped 2026-05-16.*
+*Phase 5 code shipped 2026-05-16 — commit fa2bc05. Phase 4 (Pub/Sub + Dataflow) complete — v3.0.0 shipped 2026-05-15.*
 
 Resume with: `"resume bike-demand-ml-system — check workflow_status.md and pick up from the next pending action"`

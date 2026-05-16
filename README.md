@@ -55,7 +55,7 @@ It implements:
 | API Framework | FastAPI | Inference endpoint with auto-generated OpenAPI documentation |
 | Validation | Pydantic v2 | Strict request schema validation at the API boundary |
 | ASGI Server | uvicorn | Production-grade ASGI server for FastAPI |
-| Containerisation | Docker + Docker Compose | python:3.11-slim image; models volume-mounted from host |
+| Containerisation | Docker + Docker Compose | python:3.11-slim image; all 4 city models baked into image at build time |
 | Testing | pytest + httpx + anyio | Unit tests (feature pipeline) + async integration tests (API) |
 | Linting / CI | ruff + GitHub Actions | Lint → test → docker build on every push to main |
 
@@ -99,7 +99,7 @@ bike-demand-ml-system/
 ├── requirements.txt                    ← pinned Python dependencies (inference API + tests)
 ├── requirements-pipeline.txt           ← pipeline-only deps (apache-beam, pubsub, pyyaml) — not in Docker image
 ├── Dockerfile                          ← python:3.11-slim, non-root user, health check
-├── docker-compose.yml                  ← local dev orchestration; models volume mount
+├── docker-compose.yml                  ← local dev orchestration; models baked into image
 ├── .dockerignore                       ← excludes venv/, .git/, *.pkl from build context
 ├── .gitignore
 │
@@ -159,7 +159,7 @@ bike-demand-ml-system/
 
 ### 📌 Option 1 — Local (Recommended for development)
 
-> Train the model first (`python models/train.py`) so the `.pkl` artefacts are on disk before starting the service.
+> Models for all 4 cities are trained and baked into the Docker image at build time — no pre-training step is needed before running the service.
 
 #### 1. Clone the repository
 

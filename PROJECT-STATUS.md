@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 5 GCP provisioned — verification + v4.0.0 release next | 🔄 In Progress | `c0abb06` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 5 GCP provisioned — verification + v4.0.0 release next | 🔄 In Progress | `2b54a63` |
 | **bike_demand_prediction** | R Shiny dashboard | Phase 7F complete — GCP Stream tab live (v1.2.0); end-to-end verified 2026-05-16 | ✅ Done | `6dbe149` |
 
 ### Trained City Models
@@ -143,6 +143,6 @@ Both repos form a single portfolio system. Track them together here.
 4. `gcloud scheduler jobs run bike-demand-weekly-retrain` — trigger via Cloud Scheduler
 After verification: publish GitHub release v4.0.0.
 
-*Phase 5 GCP provisioned 2026-05-17 — commit c0abb06. Phase 4 (Pub/Sub + Dataflow) complete — v3.0.0 shipped 2026-05-15.*
+*Phase 5 GCP provisioned 2026-05-17 — commit 2b54a63. Phase 4 (Pub/Sub + Dataflow) complete — v3.0.0 shipped 2026-05-15.*
 
 Resume with: `"resume bike-demand-ml-system — check workflow_status.md and pick up from the next pending action"`

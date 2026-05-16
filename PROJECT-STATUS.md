@@ -12,7 +12,7 @@ Both repos form a single portfolio system. Track them together here.
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
 | **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 4 complete — GBFS→Pub/Sub→Dataflow→BigQuery end-to-end verified (v3.0.0) | ✅ Done | `7ef3aad` |
-| **bike_demand_prediction** | R Shiny dashboard | Phase 7F complete — GCP Stream tab live (v1.2.0 — 2026-05-16) | ✅ Done | `1764b19` |
+| **bike_demand_prediction** | R Shiny dashboard | Phase 7F complete — GCP Stream tab live (v1.2.0); end-to-end verified 2026-05-16 | ✅ Done | `6dbe149` |
 
 ### Trained City Models
 

@@ -1,6 +1,7 @@
 google-cloud-aiplatform==1.74.0
 mlflow>=2.18.0,<3.0.0
 google-cloud-storage==2.18.2
+gcsfs>=2024.2.0
 fastapi==0.136.1
 uvicorn[standard]==0.46.0
 pyyaml==6.0.2

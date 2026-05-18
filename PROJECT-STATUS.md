@@ -11,17 +11,17 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v1.4.0 — Paris + Chicago RF models shipped | ✅ Done | `d8ee4e0` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 7 — 6-city pytest suite shipped | ✅ Done | `8bcdb4c` |
 | **bike_demand_prediction** | R Shiny dashboard | v1.3.0 shipped — Feed Health Alerting panel live; real-time GBFS status sidebar; OpenWeather API live (2026-05-17) | ✅ Done | `5bc9b09` |
 
 ### Trained City Models
 
 | City | Dataset | Rows | RMSE | Top Feature | Artifacts |
 |------|---------|------|------|-------------|-----------|
-| Seoul | UCI Seoul Bike Sharing | 8,760 | **173.21** | TEMPERATURE (0.34) | `models/artifacts/seoul/` |
-| London | Kaggle london_merged.csv | 17,414 | **228.58** | HOUR (0.71) | `models/artifacts/london/` |
-| NYC | BigQuery citibike_trips (2014–2018) + Open-Meteo | 34,187 | **345.69** | HOUR (0.52) | `models/artifacts/nyc/` |
-| Washington DC | Capital Bikeshare CSVs (2014–2018) + Open-Meteo | 37,663 | **97.47** | HOUR (0.61) | `models/artifacts/dc/` |
+| Seoul | UCI Seoul Bike Sharing | 8,760 | **328.84** | TEMPERATURE (0.40) | `models/artifacts/seoul/` |
+| London | Kaggle london_merged.csv | 17,414 | **316.56** | HOUR (0.71) | `models/artifacts/london/` |
+| NYC | BigQuery citibike_trips (2014–2018) + Open-Meteo | 34,187 | **470.76** | HOUR (0.52) | `models/artifacts/nyc/` |
+| Washington DC | Capital Bikeshare CSVs (2014–2018) + Open-Meteo | 37,663 | **119.31** | HOUR (0.62) | `models/artifacts/dc/` |
 | Paris | opendata.paris.fr counter ZIPs (2022–2024) + Open-Meteo | 26,297 | **23.30** | HOUR (0.634) | `models/artifacts/paris/` ✅ |
 | Chicago | Divvy quarterly CSVs (2019–2022) + Open-Meteo | 32,720 | **202.99** | HOUR + TEMPERATURE (0.39 each) | `models/artifacts/chicago/` ✅ |
 
@@ -35,7 +35,7 @@ Both repos form a single portfolio system. Track them together here.
 | ~~3~~ | bike-demand-ml-system | ~~Phase 5 — Vertex AI + MLflow~~ | ~~v4.0.0~~ | **✅ Shipped (2026-05-17)** |
 | ~~3~~ | bike_demand_prediction | ~~Feed Health Alerting — GBFS feed status panel~~ | ~~v1.3.0~~ | **✅ Shipped (2026-05-17)** |
 | ~~4~~ | bike_demand_prediction | ~~Backlog — Paris/Chicago models~~ | ~~v1.4.0~~ | **✅ Shipped (2026-05-18)** |
-| **5** | Both | Backlog — testthat / pytest | — | None |
+| ~~5~~ | bike-demand-ml-system | ~~Phase 7 — Automated Test Suite (pytest)~~ | ~~—~~ | **✅ Shipped (2026-05-18)** |
 | **6** | bike_demand_prediction | Backlog — Seoul GBFS | — | External API key |
 | **7** | bike_demand_prediction | Backlog — City expansion (SF/Amsterdam) | — | Data sourcing required |
 
@@ -46,7 +46,7 @@ Both repos form a single portfolio system. Track them together here.
 ### ML Pipeline
 * Seoul Bike Sharing dataset (UCI, 8,760 hourly rows) ingested; DD/MM datetime parsing
 * Feature engineering: `year`, `month`, `day`, `dayofweek` + one-hot (`SEASONS`, `HOLIDAY`, `FUNCTIONING_DAY`)
-* Random Forest baseline: RMSE **173.21** bikes/hr (Seoul); scaler removed (RF is scale-invariant)
+* Random Forest baseline: RMSE **328.84** bikes/hr (Seoul, chronological 80/20 split); scaler removed (RF is scale-invariant)
 * Feature schema persisted at training time — no train/serve skew at inference
 
 ### API + Service Layer
@@ -57,17 +57,17 @@ Both repos form a single portfolio system. Track them together here.
 ### Multi-City Training (Phase 2)
 * `--city` CLI arg in `models/train.py`; per-city artifacts at `models/artifacts/<city>/`
 * `city: str = "Seoul"` field on `PredictionRequest`; service layer routes to correct artifact
-* **London**: Kaggle CSV prepared via `prepare_london()`; RMSE **228.58**; HOUR dominates (0.71)
-* **NYC**: BigQuery `new_york_citibike` (2014–2018) + Open-Meteo via `data/fetch_nyc_weather.py`; RMSE **345.69**; HOUR (0.52) + year growth trend (0.12)
+* **London**: Kaggle CSV prepared via `prepare_london()`; RMSE **316.56** (chronological split); HOUR dominates (0.71)
+* **NYC**: BigQuery `new_york_citibike` (2014–2018) + Open-Meteo via `data/fetch_nyc_weather.py`; RMSE **470.76** (chronological split); HOUR (0.52) + year growth trend (0.12)
 * `services/predictor.py`: fallback to Seoul for cities without trained artifacts; city slug map routes "new york" → nyc, "washington dc" → dc
 * `data/prepare_city_data.py`: `prepare_london()`, `nyc_bigquery_sql()`, `prepare_nyc_from_joined()`, `prepare_dc_from_joined()`
 * `data/fetch_dc_weather.py`: Capital Bikeshare trip aggregation + Open-Meteo join + Seoul-schema prepare for DC
-* **Washington DC**: Capital Bikeshare CSVs (2014–2018) + Open-Meteo join via `data/fetch_dc_weather.py`; RMSE **97.47** bikes/hr; HOUR dominates (0.61); 37,663 hourly rows
+* **Washington DC**: Capital Bikeshare CSVs (2014–2018) + Open-Meteo join via `data/fetch_dc_weather.py`; RMSE **119.31** bikes/hr (chronological split); HOUR dominates (0.62); 37,663 hourly rows
 * `data/raw/` restructured: per-city subfolders (`seoul/`, `london/`, `nyc/`, `dc/trips/`); `requests` added to `requirements.txt`
 
 ### Infrastructure (containerisation + CI)
 * `requirements.txt` — 10 packages pinned; `pytest.ini` — `pythonpath = .`
-* 15 tests: 9 unit (feature engineering) + 5 integration (API) + 1 city default test
+* 27 tests: 9 unit (features) + 5 API integration + 1 city default + 6 RMSE gates (`-m slow`) + 5 routing + 1 schema frozen-set guard
 * `Dockerfile` — `python:3.11-slim`, non-root `appuser`, stdlib health check; inline comments moved to standalone lines (Docker parse fix, commit `1ae284f`)
 * `docker-compose.yml` — fastapi service, port 8000, `USE_PUBSUB=false`; volume mount removed (artifacts baked into image)
 * `.github/workflows/ci.yml` — ruff lint → pytest (trains Seoul model) → docker build → push to GHCR; all 4 jobs green on push to main
@@ -79,7 +79,7 @@ Both repos form a single portfolio system. Track them together here.
 * No API authentication or rate-limiting
 * No drift monitoring on inference inputs — feature importances are logged to MLflow each run but no automated alert threshold
 * Paris RMSE (23.30) reflects counter MEAN normalisation (~50–500/hr scale), not raw station volume — correct behaviour
-* NYC RMSE (345.69) is higher due to larger absolute trip volumes; adding weather data beyond
+* NYC RMSE (470.76) is higher due to larger absolute trip volumes; adding weather data beyond
   temperature/humidity (e.g. actual visibility, not Open-Meteo zeros) would likely reduce it
 * Dataflow streaming pipeline has **no always-free tier** (~$0.05/hr on e2-medium) — run only for demos; cancel after verification
 
@@ -115,6 +115,15 @@ Both repos form a single portfolio system. Track them together here.
 * [x] GitHub release v3.0.0 published (2026-05-15)
 * Unlocks R Shiny Phase 7F ✅ — BigQuery table live
 
+### Phase 7 — Automated Test Suite ✅ Done (2026-05-18 — commit ca05b35)
+* Spec: `docs/superpowers/specs/2026-05-18-pytest-suite-design.md`
+* `pytest.ini` — `slow` marker registered; fast tests (`-m not slow`) run in every CI push; RMSE gates run only on push to main
+* `tests/test_features.py` — `test_feature_schema_is_frozen`: frozenset of 21 columns; actionable failure message names all 6 cities + Vertex AI container retrain steps
+* `tests/test_model_accuracy.py` — 6 `@pytest.mark.slow` parametrised RMSE gate tests; chronological 80/20 split matches `train.py` exactly
+* `tests/test_routing.py` — 5 no-fallback routing tests (paris→paris, chicago→chicago, "new york"→nyc, "washington dc"→dc, unknown→seoul fallback); real sklearn RF + monkeypatch
+* `.github/workflows/ci.yml` Job 7 (`accuracy`) — parallel to Job 2, push to main only; ~5 min wall time
+* All 7 CI jobs green on push to main ✅
+
 ### Phase 5 — Vertex AI + Experiment Tracking ✅ Done (v4.0.0 — commit d5c2a54)
 * **Code shipped 2026-05-16** — spec: `docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`
 * `pipeline/retrain_job.py` — 6-combo hyperparameter sweep per city; SQLite+GCS MLflow tracking; RMSE gate (0.97); DRY_RUN mode
@@ -136,10 +145,10 @@ Both repos form a single portfolio system. Track them together here.
 
 ## 🚀 Next Step
 
-**v1.4.0 Paris + Chicago RF models shipped (2026-05-18).** Both endpoints verified live — Paris 89.45 bikes/hr, Chicago 1281.08 bikes/hr, no Seoul fallback in logs.
+**Phase 7 — Automated Test Suite shipped (2026-05-18).** 27 tests across 5 modules; CI Job 7 RMSE accuracy gates added; all 7 CI jobs green. Commits: `ca05b35` (CI) through `8bcdb4c` (docs).
 
-**Next priority:** Backlog — testthat / pytest (Priority 5); or Seoul GBFS key registration (Priority 6).
+**Next priority:** testthat suite for R Shiny repo (Priority 5 carryover); or Seoul GBFS key registration (Priority 6).
 
-*v1.4.0 shipped 2026-05-18 — commit d8ee4e0. Phase 5 (Vertex AI + MLflow) complete — v4.0.0 shipped 2026-05-17.*
+*Phase 7 complete 2026-05-18 — commit 8bcdb4c. v1.4.0 Paris + Chicago shipped 2026-05-18 — commit d8ee4e0. Phase 5 (Vertex AI + MLflow) complete — v4.0.0 shipped 2026-05-17.*
 
 Resume with: `"resume bike-demand-ml-system — check workflow_status.md and pick up from the next pending action"`

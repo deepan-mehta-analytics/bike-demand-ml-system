@@ -3,7 +3,7 @@
 ## ⚡ Quick Summary
 This project is the **Python ML backend** in a two-repo portfolio system. It forecasts hourly bike-rental demand from weather and temporal signals, exposes the model through a FastAPI inference API, and is consumed by the companion [R Shiny dashboard](https://github.com/deepan-mehta-analytics/bike-demand-prediction) via `httr::POST /predict`. The architecture separates training from inference cleanly, persists model artifacts for reproducible deployment, and is containerised for local and cloud deployment.
 
-**v4.0.0 is live.** A `bike-demand-trigger` Cloud Run service submits a 6-combo hyperparameter sweep to Vertex AI every Sunday, with SQLite+GCS-backed MLflow experiment tracking and a 3% RMSE gate before promoting models to Production — all 4 city models verified in the MLflow registry. The FastAPI inference API runs on GCP Cloud Run at `https://bike-demand-api-246440913351.us-central1.run.app` with structured JSON logging and a Prometheus `/metrics` endpoint. A real-time GBFS streaming pipeline (v3.0.0) polls 4 cities every 60 seconds, publishes to Cloud Pub/Sub, and aggregates 5-minute windows into BigQuery via Apache Beam Dataflow.
+**v4.1.0 is live.** A `bike-demand-trigger` Cloud Run service submits a 6-combo hyperparameter sweep to Vertex AI every Sunday, with SQLite+GCS-backed MLflow experiment tracking and a 3% RMSE gate before promoting models to Production — all 6 city models verified. A 27-test pytest suite (v4.1.0) enforces RMSE gates, schema consistency, and per-city routing across all 6 cities on every push to main. The FastAPI inference API runs on GCP Cloud Run at `https://bike-demand-api-246440913351.us-central1.run.app` with structured JSON logging and a Prometheus `/metrics` endpoint. A real-time GBFS streaming pipeline (v3.0.0) polls 4 cities every 60 seconds, publishes to Cloud Pub/Sub, and aggregates 5-minute windows into BigQuery via Apache Beam Dataflow.
 
 It is engineered as the next stage in a data analytics → data engineering → ML engineering trajectory: a model that ships to an API, not a notebook that ships to a screenshot.
 
@@ -31,7 +31,7 @@ It is engineered as the next stage in a data analytics → data engineering → 
 ## 📌 Project Overview
 This project implements an **end-to-end machine learning system** for forecasting hourly bike-rental demand. It evolves from data analytics into a structured ML platform with a clean separation between training, persistence, business logic, and API delivery.
 
-It trains across **four cities** (Seoul, London, NYC, Washington DC) on a shared 14-column schema, demonstrating ML engineering patterns required to ship a model from notebook into a deployable multi-city API.
+It trains across **six cities** (Seoul, London, NYC, Washington DC, Paris, Chicago) on a shared 14-column schema, demonstrating ML engineering patterns required to ship a model from notebook into a deployable multi-city API.
 
 It implements:
 
@@ -103,7 +103,7 @@ bike-demand-ml-system/
 ├── requirements-pipeline.txt           ← pipeline-only deps (apache-beam, pubsub, pyyaml) — not in Docker image
 ├── requirements-vertex.txt             ← training container deps (google-cloud-aiplatform, mlflow, pandas<3)
 ├── Dockerfile                          ← python:3.11-slim, non-root user, health check
-├── Dockerfile.training                 ← training + trigger container; bakes all 4 city CSVs; CMD runs retrain_job.py
+├── Dockerfile.training                 ← training + trigger container; bakes all 6 city CSVs; CMD runs retrain_job.py
 ├── docker-compose.yml                  ← local dev orchestration; models baked into image
 ├── .dockerignore                       ← excludes venv/, .git/, *.pkl from build context
 ├── .gitignore
@@ -116,12 +116,16 @@ bike-demand-ml-system/
 │   ├── prepare_city_data.py            ← normalise city CSVs to Seoul schema
 │   ├── fetch_nyc_weather.py            ← Open-Meteo historical fetch + join for NYC
 │   ├── fetch_dc_weather.py             ← Capital Bikeshare trip aggregation + Open-Meteo join for DC
+│   ├── fetch_paris_weather.py          ← Vélib' Métropole counter ZIPs + Open-Meteo join for Paris
+│   ├── fetch_chicago_weather.py        ← Divvy quarterly CSVs + Open-Meteo join for Chicago
 │   ├── raw/
 │   │   ├── seoul/seoul_bike_sharing.csv    ← UCI Seoul dataset
 │   │   ├── london/london_merged.csv        ← Kaggle London dataset
 │   │   ├── nyc/                            ← BigQuery export + Open-Meteo weather + joined CSV
-│   │   └── dc/                             ← Capital Bikeshare CSVs + Open-Meteo weather + joined CSV
-│   │       └── trips/                      ← raw quarterly/annual Capital Bikeshare CSVs
+│   │   ├── dc/                             ← Capital Bikeshare CSVs + Open-Meteo weather + joined CSV
+│   │   │   └── trips/                      ← raw quarterly/annual Capital Bikeshare CSVs
+│   │   ├── paris/                          ← Vélib' annual ZIPs (2022–2024) + Open-Meteo weather
+│   │   └── chicago/                        ← Divvy quarterly CSVs (2019–2022) + Open-Meteo weather
 │   └── processed/                      ← Seoul-schema CSVs ready for models/train.py
 │
 ├── models/
@@ -133,7 +137,9 @@ bike-demand-ml-system/
 │       ├── seoul/                      ← random_forest_model.pkl + feature_columns.pkl
 │       ├── london/                     ← random_forest_model.pkl + feature_columns.pkl
 │       ├── nyc/                        ← random_forest_model.pkl + feature_columns.pkl
-│       └── dc/                         ← random_forest_model.pkl + feature_columns.pkl
+│       ├── dc/                         ← random_forest_model.pkl + feature_columns.pkl
+│       ├── paris/                      ← random_forest_model.pkl + feature_columns.pkl
+│       └── chicago/                    ← random_forest_model.pkl + feature_columns.pkl
 │
 ├── services/
 │   └── predictor.py                    ← service layer: lazy singleton, decouples API from ML
@@ -176,7 +182,7 @@ bike-demand-ml-system/
 
 ### 📌 Option 1 — Local (Recommended for development)
 
-> Models for all 4 cities are trained and baked into the Docker image at build time — no pre-training step is needed before running the service.
+> Models for all 6 cities are trained and baked into the Docker image at build time — no pre-training step is needed before running the service.
 
 #### 1. Clone the repository
 
@@ -262,7 +268,7 @@ Expected response: `{"predictions": [605.6]}`
 Model artifacts are baked into the image at build time — no local training step required.
 
 ```bash
-# Build the image (trains all 4 city models during build) and start the container
+# Build the image (trains all 6 city models during build) and start the container
 docker compose up --build
 
 # API is live at http://localhost:8000
@@ -579,7 +585,7 @@ These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 - [x] `data/prepare_city_data.py` — London column-map + NYC BigQuery SQL utility
 - [x] README: multi-city RMSE table (Seoul trained; London + NYC pending data download)
 - [x] Download London data (`london_merged.csv` from Kaggle) → `prepare_london()` → `data/processed/london_bike_sharing.csv`
-- [x] Train London model — RMSE 228.58 bikes/hr; artifacts at `models/artifacts/london/`
+- [x] Train London model — RMSE 316.56 bikes/hr (chronological split); artifacts at `models/artifacts/london/`
 - [x] Build NYC joined dataset (BigQuery trips + Open-Meteo weather) and run `prepare_nyc_from_joined()`
 - [x] Train NYC model; populate RMSE table entry
 - [x] Add `prepare_dc_from_joined()` + `data/fetch_dc_weather.py` for Capital Bikeshare

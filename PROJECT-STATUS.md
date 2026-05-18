@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 7 — 6-city pytest suite shipped | ✅ Done | `8bcdb4c` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v4.1.0 — 6-city automated test suite | ✅ Done | `f82f098` |
 | **bike_demand_prediction** | R Shiny dashboard | v1.3.0 shipped — Feed Health Alerting panel live; real-time GBFS status sidebar; OpenWeather API live (2026-05-17) | ✅ Done | `5bc9b09` |
 
 ### Trained City Models
@@ -145,7 +145,7 @@ Both repos form a single portfolio system. Track them together here.
 
 ## 🚀 Next Step
 
-**Phase 7 — Automated Test Suite shipped (2026-05-18).** 27 tests across 5 modules; CI Job 7 RMSE accuracy gates added; all 7 CI jobs green. Commits: `ca05b35` (CI) through `8bcdb4c` (docs).
+**v4.1.0 shipped (2026-05-18) — 6-city automated test suite.** 27 tests across 5 modules; CI Job 7 RMSE accuracy gates; all 7 CI jobs green. Last commit: `f82f098`.
 
 **Next priority:** testthat suite for R Shiny repo (Priority 5 carryover); or Seoul GBFS key registration (Priority 6).
 

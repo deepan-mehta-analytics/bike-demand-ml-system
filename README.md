@@ -22,6 +22,7 @@ It is engineered as the next stage in a data analytics → data engineering → 
 [![Docker](https://img.shields.io/badge/Docker-Containerised-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Status](https://img.shields.io/badge/v3.0.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
 [![Status](https://img.shields.io/badge/v4.0.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
+[![Status](https://img.shields.io/badge/v4.1.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
 [![Cloud Run](https://img.shields.io/badge/Cloud_Run-Live-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://bike-demand-api-246440913351.us-central1.run.app)
 [![Prometheus](https://img.shields.io/badge/Prometheus-metrics-orange?style=for-the-badge&logo=prometheus&logoColor=white)](https://bike-demand-api-246440913351.us-central1.run.app/metrics)
 

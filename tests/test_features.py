@@ -5,6 +5,25 @@ import pytest                                                 # test framework a
 from models.features import create_features, get_feature_target  # functions under test
 
 
+# ── Frozen Feature Schema ─────────────────────────────────────────────────
+# Update only after retraining all 6 city models + rebuilding the Vertex AI training container.
+EXPECTED_COLUMNS = frozenset({                               # canonical column set from create_features + get_feature_target
+    # ── Numeric weather features ──────────────────────────
+    "HOUR", "TEMPERATURE", "HUMIDITY", "WIND_SPEED",         # core demand signals
+    "VISIBILITY", "DEW_POINT_TEMPERATURE",                   # atmospheric conditions
+    "SOLAR_RADIATION", "RAINFALL", "SNOWFALL",               # precipitation and solar
+    # ── Temporal features (derived by create_features) ────
+    "year", "month", "day", "dayofweek",                     # date components parsed from DATE column
+    # ── One-hot: SEASONS ──────────────────────────────────
+    "SEASONS_Autumn", "SEASONS_Spring",                      # season dummies (Seoul schema)
+    "SEASONS_Summer", "SEASONS_Winter",                      # all four seasons must be present
+    # ── One-hot: HOLIDAY ──────────────────────────────────
+    "HOLIDAY_Holiday", "HOLIDAY_No Holiday",                 # public holiday flag dummies
+    # ── One-hot: FUNCTIONING_DAY ──────────────────────────
+    "FUNCTIONING_DAY_No", "FUNCTIONING_DAY_Yes",             # system operational flag dummies
+})
+
+
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
 @pytest.fixture
@@ -26,6 +45,32 @@ def sample_df():
         "FUNCTIONING_DAY": "Yes",                             # rental system is operational
         "RENTED_BIKE_COUNT": 500,                             # target; included for get_feature_target split
     }])
+
+
+@pytest.fixture
+def full_schema_df():
+    """Multi-row DataFrame covering every categorical value so pd.get_dummies produces the full schema."""
+    rows = []                                                 # accumulate one row per seasonal + holiday combo
+    for season in ["Spring", "Summer", "Autumn", "Winter"]:  # all four seasons must be represented
+        for holiday in ["Holiday", "No Holiday"]:            # both holiday states must be represented
+            for func_day in ["Yes", "No"]:                   # both functioning-day states must be represented
+                rows.append({                                 # one complete record per combination
+                    "DATE": "01/06/2018",                    # fixed date — temporal values constant across rows
+                    "HOUR": 8,                               # fixed hour
+                    "TEMPERATURE": 15.0,                     # fixed numeric features
+                    "HUMIDITY": 60,
+                    "WIND_SPEED": 2.5,
+                    "VISIBILITY": 1500,
+                    "DEW_POINT_TEMPERATURE": 7.0,
+                    "SOLAR_RADIATION": 0.8,
+                    "RAINFALL": 0.0,
+                    "SNOWFALL": 0.0,
+                    "SEASONS": season,                       # varies per row — all four seasons present
+                    "HOLIDAY": holiday,                      # varies per row — both states present
+                    "FUNCTIONING_DAY": func_day,             # varies per row — both states present
+                    "RENTED_BIKE_COUNT": 500,                # target column — required by get_feature_target
+                })
+    return pd.DataFrame(rows)                                # 16-row DataFrame covering all categorical combos
 
 
 # ── Temporal Feature Extraction ───────────────────────────────────────────
@@ -103,3 +148,17 @@ def test_get_feature_target_includes_core_numerics(sample_df):
         "year", "month", "day", "dayofweek",                  # temporal features derived by create_features
     }
     assert expected.issubset(set(X.columns))                  # all expected numerics must be present
+
+
+# ── Schema Guard ──────────────────────────────────────────────────────────
+
+def test_feature_schema_is_frozen(full_schema_df):
+    """Feature column set must not change without retraining all city models."""
+    df = create_features(full_schema_df.copy())              # derive temporal columns from DATE
+    X, _ = get_feature_target(df)                            # one-hot encode and drop target + DATE
+    assert set(X.columns) == EXPECTED_COLUMNS, (             # exact column set must match frozen schema
+        "Feature schema changed. Before merging:\n"
+        "  - retrain all 6 city models: seoul, london, nyc, dc, paris, chicago\n"
+        "  - rebuild and push the Vertex AI training container (Dockerfile.training)\n"
+        "  - verify RMSE gates still pass: pytest -m slow tests/test_model_accuracy.py"
+    )

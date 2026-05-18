@@ -253,7 +253,7 @@ curl -X POST http://127.0.0.1:8000/predict \
 
 Expected response: `{"predictions": [605.6]}`
 
-> **`city`** is optional — defaults to `"Seoul"` if omitted. Pass `"city": "London"`, `"city": "nyc"`, or `"city": "Washington DC"` to route to per-city artifacts. Cities without a trained model (Paris, Chicago) fall back to Seoul.
+> **`city`** is optional — defaults to `"Seoul"` if omitted. Pass `"city": "London"`, `"city": "nyc"`, `"city": "Paris"`, `"city": "Chicago"`, or `"city": "Washington DC"` to route to per-city artifacts. Unknown cities fall back to Seoul.
 
 ---
 
@@ -650,6 +650,8 @@ Four city datasets are normalised to a common 14-column Seoul schema before trai
 | **London** | [Kaggle London Bike Sharing](https://www.kaggle.com/datasets/hmavrodiev/london-bike-sharing-dataset) | 17,414 | Jan 2015 – Jan 2017 | 3 meteorological columns absent (zeroed) |
 | **NYC** | [BigQuery `new_york_citibike`](https://console.cloud.google.com/marketplace/product/city-of-new-york/nyc-citi-bike) + [Open-Meteo](https://open-meteo.com/) | 34,187 | Jan 2014 – Dec 2018 | Trip counts from BigQuery; weather joined via `fetch_nyc_weather.py` |
 | **Washington DC** | [Capital Bikeshare system data](https://capitalbikeshare.com/system-data) + [Open-Meteo](https://open-meteo.com/) | 37,663 | Jan 2014 – Dec 2018 | Trip counts aggregated from quarterly CSVs; weather joined via `fetch_dc_weather.py` |
+| **Paris** | [Paris OpenData Vélib' Métropole counter ZIPs](https://opendata.paris.fr) + [Open-Meteo](https://open-meteo.com/) | 26,297 | 2022–2024 | Annual historical ZIPs (2022+2023+2024); MEAN station counter scale; joined via `fetch_paris_weather.py` |
+| **Chicago** | [Divvy Bikes system data](https://divvybikes.com/system-data) + [Open-Meteo](https://open-meteo.com/) | 32,720 | 2019–2022 | Quarterly CSVs (37/38 quarters; Q2-2019 skipped — different schema); joined via `fetch_chicago_weather.py` |
 
 **Shared schema (14 columns):** `DATE`, `HOUR`, `TEMPERATURE`, `HUMIDITY`, `WIND_SPEED`, `VISIBILITY`, `DEW_POINT_TEMPERATURE`, `SOLAR_RADIATION`, `RAINFALL`, `SNOWFALL`, `SEASONS`, `HOLIDAY`, `FUNCTIONING_DAY`, `RENTED_BIKE_COUNT`
 

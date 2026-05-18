@@ -12,7 +12,7 @@ Both repos form a single portfolio system. Track them together here.
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
 | **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v4.1.0 — 6-city automated test suite | ✅ Done | `f82f098` |
-| **bike_demand_prediction** | R Shiny dashboard | v1.3.0 shipped — Feed Health Alerting panel live; real-time GBFS status sidebar; OpenWeather API live (2026-05-17) | ✅ Done | `5bc9b09` |
+| **bike_demand_prediction** | R Shiny dashboard | v1.4.0 shipped — Paris + Chicago RF models; testthat bootstrap done; Tasks 2–5 pending | 🔄 In Progress | `717bfd2` |
 
 ### Trained City Models
 

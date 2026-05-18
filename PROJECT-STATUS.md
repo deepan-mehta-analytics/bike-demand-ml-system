@@ -11,8 +11,8 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v4.1.0 — 6-city automated test suite | ✅ Done | `f82f098` |
-| **bike_demand_prediction** | R Shiny dashboard | v1.4.0 shipped — Paris + Chicago RF models; testthat bootstrap done; Tasks 2–5 pending | 🔄 In Progress | `717bfd2` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v4.1.0 — 6-city automated test suite | ✅ Done | `dfcf872` |
+| **bike_demand_prediction** | R Shiny dashboard | v1.4.0 shipped — testthat Tasks 1+2 done; Tasks 3–5 pending | 🔄 In Progress | `401062a` |
 
 ### Trained City Models
 

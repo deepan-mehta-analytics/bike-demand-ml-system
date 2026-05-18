@@ -63,7 +63,7 @@ Each test is marked `@pytest.mark.slow`.
 
 | City    | Threshold | Trained RMSE | Headroom |
 |---------|-----------|--------------|----------|
-| Seoul   | 250       | 173.21       | 76       |
+| Seoul   | 450       | 328.84 (chronological split) | 121 |
 | London  | 350       | 228.58       | 121      |
 | NYC     | 500       | 345.69       | 154      |
 | DC      | 150       | 97.47        | 53       |

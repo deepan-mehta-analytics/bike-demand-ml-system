@@ -16,3 +16,9 @@ models/artifacts/**
 notebooklm/
 # Raw Capital Bikeshare quarterly CSVs — large files, regenerate via fetch_dc_weather.py
 data/raw/dc/trips/
+
+# Raw Paris counter CSV — large opendata.paris.fr download; regenerate via fetch_paris_weather.py
+data/raw/paris/paris_hourly.csv
+
+# Chicago Divvy quarterly CSVs — large downloads; regenerate via fetch_chicago_weather.py
+data/raw/chicago/trips/

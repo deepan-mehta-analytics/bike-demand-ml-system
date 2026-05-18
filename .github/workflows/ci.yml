@@ -126,3 +126,21 @@ jobs:
           tags: |
             us-central1-docker.pkg.dev/bike-demand-ml-system/bike-demand-repo/bike-demand-training:latest
             us-central1-docker.pkg.dev/bike-demand-ml-system/bike-demand-repo/bike-demand-training:${{ github.sha }}
+
+  # Job 7: RMSE accuracy gates
+  # Trains a fresh RF per city from committed processed CSVs; asserts RMSE < threshold.
+  # Runs only on push to main (not PRs); parallel to the test job (both need only lint).
+  # No GCP credentials required — pure pandas + sklearn from requirements.txt.
+  # Expected wall time: ~5 min (6 RF training runs).
+  accuracy:
+    name: RMSE accuracy gates
+    runs-on: ubuntu-latest                        # standard GitHub-hosted runner
+    needs: lint                                   # parallel to test job; skip only if lint fails
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4                 # check out source and committed city CSVs
+      - uses: actions/setup-python@v5             # provision Python
+        with:
+          python-version: "3.11"                  # match all other jobs
+      - run: pip install -r requirements.txt      # install sklearn, pandas, joblib, pytest
+      - run: pytest -m slow tests/test_model_accuracy.py -v  # run the 6 RMSE gate tests only

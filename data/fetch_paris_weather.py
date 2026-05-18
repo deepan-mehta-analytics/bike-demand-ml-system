@@ -95,24 +95,45 @@ def aggregate_counter_data() -> pd.DataFrame:
     for path in csv_paths:                                             # iterate each annual CSV
         try:
             frame = pd.read_csv(path, sep=";", encoding="utf-8", low_memory=False)  # semicolon-separated UTF-8
-            print(f"  Loaded {Path(path).name}: {len(frame):,} rows")
-            frames.append(frame)                                       # add to list for concatenation
+
+            if DATE_COL not in frame.columns:                          # abort with diagnostic if column missing
+                raise KeyError(
+                    f"Expected column '{DATE_COL}' not found in {Path(path).name}.\n"
+                    f"Actual columns: {frame.columns.tolist()}"
+                )
+
+            # Normalise dates immediately per file to avoid mixed-format issues after concat.
+            # Annual files have three different formats across years:
+            #   2022: '2022-01-01T00:00:00'          (no timezone — naive)
+            #   2023: '2023-01-01T07:00:00+01:00'    (ISO with offset)
+            #   2024: '2024-01-02 19:00:00.000 +0100' (space-separated, milliseconds)
+            # pandas 2.x drops naive datetimes to NaT when a mixed series is parsed with
+            # utc=True, so we localise timezone-naive rows to Europe/Paris first.
+            raw_dates  = pd.to_datetime(frame[DATE_COL], utc=True, errors="coerce")  # parse aware rows to UTC
+            naive_mask = raw_dates.isna() & frame[DATE_COL].notna()    # rows that failed = timezone-naive
+            if naive_mask.any():                                        # handle files without timezone (e.g. 2022)
+                naive_parsed = pd.to_datetime(                         # parse naive strings without tz
+                    frame.loc[naive_mask, DATE_COL], errors="coerce"
+                )
+                naive_utc = (                                          # localise to Paris then convert to UTC
+                    naive_parsed
+                    .dt.tz_localize("Europe/Paris", ambiguous="infer", nonexistent="shift_forward")
+                    .dt.tz_convert("UTC")
+                )
+                raw_dates = raw_dates.copy()                           # avoid SettingWithCopyWarning
+                raw_dates[naive_mask] = naive_utc                      # fill in the previously-NaT slots
+            frame[DATE_COL] = raw_dates                                # replace raw strings with UTC Timestamps
+            n_valid = frame[DATE_COL].notna().sum()                    # count parseable rows for logging
+            print(f"  Loaded {Path(path).name}: {len(frame):,} rows ({n_valid:,} with valid dates)")
+            frames.append(frame)                                       # add normalised frame to list
         except Exception as exc:                                       # skip corrupted or mismatched files
             print(f"  WARNING: skipped {Path(path).name} — {exc}")
 
     df = pd.concat(frames, ignore_index=True)                         # stack all annual DataFrames into one
     print(f"Total rows after concat: {len(df):,}")
-    print(f"Columns detected: {df.columns.tolist()}")                  # print actual columns to diagnose schema changes
 
-    if DATE_COL not in df.columns:                                     # abort with diagnostic if column names changed
-        raise KeyError(
-            f"Expected column '{DATE_COL}' not found.\n"
-            f"Actual columns: {df.columns.tolist()}\n"
-            "Check if opendata.paris.fr updated the dataset schema."
-        )
-
-    df[DATE_COL] = pd.to_datetime(df[DATE_COL], utc=True, errors="coerce")  # parse ISO datetime → UTC Timestamp
-    df = df.dropna(subset=[DATE_COL])                                  # drop rows with unparseable datetimes
+    df = df.dropna(subset=[DATE_COL])                                  # drop any remaining unparseable datetimes
+    print(f"Rows with valid dates: {len(df):,}")
 
     # Use all available data in the file (opendata.paris.fr is a rolling dataset)
     date_min = df[DATE_COL].min()                                      # earliest timestamp in source file

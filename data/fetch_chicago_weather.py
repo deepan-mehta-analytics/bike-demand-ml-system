@@ -137,7 +137,7 @@ def fetch_weather() -> pd.DataFrame:
     df = df.drop(columns=["time"])                                     # remove raw datetime column
 
     df.to_csv(WEATHER_CSV, index=False)                                # persist weather CSV
-    print(f"Saved {len(df):,} rows → {WEATHER_CSV}")
+    print(f"Saved {len(df):,} rows -> {WEATHER_CSV}")
     return df
 
 
@@ -149,12 +149,12 @@ def join_trips_weather(trips: pd.DataFrame, weather: pd.DataFrame) -> pd.DataFra
     if len(joined) == 0:                                               # abort if join is empty
         raise ValueError(
             "Inner join produced 0 rows.\n"
-            f"Trips date range:   {trips['DATE'].min()} → {trips['DATE'].max()}\n"
-            f"Weather date range: {weather['DATE'].min()} → {weather['DATE'].max()}"
+            f"Trips date range:   {trips['DATE'].min()} to {trips['DATE'].max()}\n"
+            f"Weather date range: {weather['DATE'].min()} to {weather['DATE'].max()}"
         )
 
     joined.to_csv(JOINED_CSV, index=False)                             # persist joined CSV
-    print(f"Joined: {len(joined):,} rows → {JOINED_CSV}")
+    print(f"Joined: {len(joined):,} rows -> {JOINED_CSV}")
     return joined
 
 
@@ -176,7 +176,7 @@ def prepare_and_assert(joined_path: Path) -> pd.DataFrame:
     )
 
     df_out.to_csv(OUTPUT_CSV, index=False)                             # write final training-ready CSV
-    print(f"Final: {len(df_out):,} rows → {OUTPUT_CSV}")
+    print(f"Final: {len(df_out):,} rows -> {OUTPUT_CSV}")
     print(f"Columns: {list(df_out.columns)}")                          # confirm all 14 Seoul-schema columns
     return df_out
 

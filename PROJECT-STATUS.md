@@ -11,8 +11,8 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | Phase 5 (Vertex AI + MLflow) DONE — v4.0.0 released | ✅ Done | `9eb5b3c` |
-| **bike_demand_prediction** | R Shiny dashboard | v1.3.0 shipped — Feed Health Alerting panel live; real-time GBFS status sidebar; OpenWeather API live (2026-05-17) | ✅ Done | `d68aa3b` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v1.4.0 — Paris + Chicago RF models shipped | ✅ Done | `d8ee4e0` |
+| **bike_demand_prediction** | R Shiny dashboard | v1.3.0 shipped — Feed Health Alerting panel live; real-time GBFS status sidebar; OpenWeather API live (2026-05-17) | ✅ Done | `5bc9b09` |
 
 ### Trained City Models
 
@@ -21,7 +21,9 @@ Both repos form a single portfolio system. Track them together here.
 | Seoul | UCI Seoul Bike Sharing | 8,760 | **173.21** | TEMPERATURE (0.34) | `models/artifacts/seoul/` |
 | London | Kaggle london_merged.csv | 17,414 | **228.58** | HOUR (0.71) | `models/artifacts/london/` |
 | NYC | BigQuery citibike_trips (2014–2018) + Open-Meteo | 34,187 | **345.69** | HOUR (0.52) | `models/artifacts/nyc/` |
-| Washington DC | Capital Bikeshare CSVs (2014–2018) + Open-Meteo | 37,663 | **97.47** | HOUR (0.61) | `models/artifacts/dc/` ✅ |
+| Washington DC | Capital Bikeshare CSVs (2014–2018) + Open-Meteo | 37,663 | **97.47** | HOUR (0.61) | `models/artifacts/dc/` |
+| Paris | opendata.paris.fr counter ZIPs (2022–2024) + Open-Meteo | 26,297 | **23.30** | HOUR (0.634) | `models/artifacts/paris/` ✅ |
+| Chicago | Divvy quarterly CSVs (2019–2022) + Open-Meteo | 32,720 | **202.99** | HOUR + TEMPERATURE (0.39 each) | `models/artifacts/chicago/` ✅ |
 
 ### Next Milestones (Both Repos) — Priority Ordered
 
@@ -32,7 +34,7 @@ Both repos form a single portfolio system. Track them together here.
 | ~~1~~ | bike_demand_prediction | ~~Phase 7F — GCP Streaming Dashboard~~ | ~~v1.2.0~~ | **✅ Shipped (2026-05-16)** |
 | ~~3~~ | bike-demand-ml-system | ~~Phase 5 — Vertex AI + MLflow~~ | ~~v4.0.0~~ | **✅ Shipped (2026-05-17)** |
 | ~~3~~ | bike_demand_prediction | ~~Feed Health Alerting — GBFS feed status panel~~ | ~~v1.3.0~~ | **✅ Shipped (2026-05-17)** |
-| **4** | bike_demand_prediction | Backlog — Paris/Chicago models | v1.4.0 | Data sourcing required |
+| ~~4~~ | bike_demand_prediction | ~~Backlog — Paris/Chicago models~~ | ~~v1.4.0~~ | **✅ Shipped (2026-05-18)** |
 | **5** | Both | Backlog — testthat / pytest | — | None |
 | **6** | bike_demand_prediction | Backlog — Seoul GBFS | — | External API key |
 | **7** | bike_demand_prediction | Backlog — City expansion (SF/Amsterdam) | — | Data sourcing required |
@@ -76,7 +78,7 @@ Both repos form a single portfolio system. Track them together here.
 
 * No API authentication or rate-limiting
 * No drift monitoring on inference inputs — feature importances are logged to MLflow each run but no automated alert threshold
-* Paris and Chicago have no trained models — service falls back to Seoul (proxy only)
+* Paris RMSE (23.30) reflects counter MEAN normalisation (~50–500/hr scale), not raw station volume — correct behaviour
 * NYC RMSE (345.69) is higher due to larger absolute trip volumes; adding weather data beyond
   temperature/humidity (e.g. actual visibility, not Open-Meteo zeros) would likely reduce it
 * Dataflow streaming pipeline has **no always-free tier** (~$0.05/hr on e2-medium) — run only for demos; cancel after verification
@@ -134,15 +136,10 @@ Both repos form a single portfolio system. Track them together here.
 
 ## 🚀 Next Step
 
-**Phase 5 GCP provisioning complete (2026-05-17).** Trigger service live, Cloud Scheduler wired, monitoring alerts active.
+**v1.4.0 Paris + Chicago RF models shipped (2026-05-18).** Both endpoints verified live — Paris 89.45 bikes/hr, Chicago 1281.08 bikes/hr, no Seoul fallback in logs.
 
-**Next (Python repo):** Task 9 verification sequence — requires `GOOGLE_APPLICATION_CREDENTIALS` set to vertex-sa key:
-1. `DRY_RUN=true python pipeline/retrain_job.py` — 24 MLflow runs to GCS
-2. `mlflow ui --backend-store-uri gs://bike-demand-staging/mlflow` — browse experiments
-3. Manual `gcloud ai custom-jobs create` — submit one real Vertex AI job (~$0.034 max)
-4. `gcloud scheduler jobs run bike-demand-weekly-retrain` — trigger via Cloud Scheduler
-After verification: publish GitHub release v4.0.0.
+**Next priority:** Backlog — testthat / pytest (Priority 5); or Seoul GBFS key registration (Priority 6).
 
-*Phase 5 GCP provisioned 2026-05-17 — commit 2b54a63. Phase 4 (Pub/Sub + Dataflow) complete — v3.0.0 shipped 2026-05-15.*
+*v1.4.0 shipped 2026-05-18 — commit d8ee4e0. Phase 5 (Vertex AI + MLflow) complete — v4.0.0 shipped 2026-05-17.*
 
 Resume with: `"resume bike-demand-ml-system — check workflow_status.md and pick up from the next pending action"`

@@ -28,7 +28,9 @@ USER appuser
 RUN python -m models.train --city seoul --data data/raw/seoul/seoul_bike_sharing.csv && \
     python -m models.train --city london --data data/processed/london_bike_sharing.csv && \
     python -m models.train --city nyc --data data/processed/nyc_bike_sharing.csv && \
-    python -m models.train --city dc --data data/processed/dc_bike_sharing.csv
+    python -m models.train --city dc --data data/processed/dc_bike_sharing.csv && \
+    python -m models.train --city paris --data data/processed/paris_bike_sharing.csv && \
+    python -m models.train --city chicago --data data/processed/chicago_bike_sharing.csv
 
 # Network
 # document the port uvicorn binds to inside the container

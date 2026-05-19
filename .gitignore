@@ -24,3 +24,7 @@ data/raw/paris/comptage*.csv
 
 # Chicago Divvy quarterly CSVs — large downloads; regenerate via fetch_chicago_weather.py
 data/raw/chicago/trips/
+
+# MLflow local tracking directory — created by DRY_RUN runs of retrain_job.py;
+# ephemeral SQLite + run-artifact tree, regenerable from any training run. Not for git.
+mlruns/

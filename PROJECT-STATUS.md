@@ -12,7 +12,7 @@ Both repos form a single portfolio system. Track them together here.
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
 | **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v4.1.0 — 6-city automated test suite | ✅ Done | `dfcf872` |
-| **bike_demand_prediction** | R Shiny dashboard | v1.4.0 shipped — testthat Tasks 1+2 done; Tasks 3–5 pending | 🔄 In Progress | `401062a` |
+| **bike_demand_prediction** | R Shiny dashboard | v1.5.0 shipped — testthat suite (36 tests / 62 assertions) + GitHub Actions CI | ✅ Done | `edd97e3` |
 
 ### Trained City Models
 
@@ -147,7 +147,7 @@ Both repos form a single portfolio system. Track them together here.
 
 **v4.1.0 shipped (2026-05-18) — 6-city automated test suite.** 27 tests across 5 modules; CI Job 7 RMSE accuracy gates; all 7 CI jobs green. Last commit: `f82f098`.
 
-**Next priority:** testthat suite for R Shiny repo (Priority 5 carryover); or Seoul GBFS key registration (Priority 6).
+**Next priority:** v1.5.0 GitHub release on the Shiny repo (testthat milestone); then Seoul GBFS key registration (Priority 6) or Phase 8 (shinytest2 reactive testing).
 
 *Phase 7 complete 2026-05-18 — commit 8bcdb4c. v1.4.0 Paris + Chicago shipped 2026-05-18 — commit d8ee4e0. Phase 5 (Vertex AI + MLflow) complete — v4.0.0 shipped 2026-05-17.*
 

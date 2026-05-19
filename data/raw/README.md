@@ -21,6 +21,17 @@ data/raw/
 │   ├── dc_weather.csv               ← Open-Meteo historical weather for DC
 │   ├── dc_joined.csv                ← trips + weather joined on DATE + HOUR
 │   └── trips/                       ← raw Capital Bikeshare quarterly CSVs (not tracked in git)
+├── paris/
+│   ├── paris_trips_hourly.csv       ← Vélib' Métropole counter records aggregated to hourly
+│   ├── paris_weather.csv            ← Open-Meteo historical weather for Paris
+│   ├── paris_joined.csv             ← counter + weather joined on DATE + HOUR
+│   ├── [year]_comptage*.csv         ← raw opendata.paris.fr annual ZIPs (not tracked in git — ~1-2 GB each)
+│   └── comptage*.csv                ← raw rolling-window opendata.paris.fr CSV (not tracked in git)
+├── chicago/
+│   ├── chicago_trips_hourly.csv     ← Divvy trips aggregated to hourly
+│   ├── chicago_weather.csv          ← Open-Meteo historical weather for Chicago
+│   ├── chicago_joined.csv           ← trips + weather joined on DATE + HOUR
+│   └── trips/                       ← raw Divvy quarterly CSVs (not tracked in git)
 └── selected_cities.csv              ← city list used by the R Shiny dashboard
 ```
 
@@ -61,6 +72,27 @@ data/raw/
 - **`dc_joined.csv`** — inner join of trips + weather on DATE + HOUR
 - Regenerate with: `python data/fetch_dc_weather.py`
 
+### Paris — `paris/`
+
+- **Source:** [opendata.paris.fr — Vélib' Métropole counter data](https://opendata.paris.fr/explore/dataset/comptage-velo-donnees-compteurs/) (annual ZIPs, 2022–2024) + Open-Meteo historical API
+- **Coverage:** 2022–2024 (26,297 hourly rows after MEAN-counter aggregation and weather join)
+- **Annual ZIPs** (gitignored) — large opendata.paris.fr downloads: `2023_comptage-velo-donnees-compteurs.csv` (~1.2 GB), `2024-comptage-velo-donnees-compteurs.csv` (~1.7 GB), `comptage-velo-donnees-compteurs.csv` (~390 MB rolling-window file). Patterns `[0-9]{4}*.csv` and `comptage*.csv` excluded by `.gitignore`.
+- **`paris_trips_hourly.csv`** — counter records aggregated to DATE + HOUR using MEAN across all stations (normalised counter scale)
+- **`paris_weather.csv`** — Open-Meteo archive (lat=48.8566, lng=2.3522, timezone=Europe/Paris)
+- **`paris_joined.csv`** — inner join of counter + weather on DATE + HOUR
+- Regenerate with: `python -m data.fetch_paris_weather`
+- **Note on scale:** Paris uses MEAN counter values, not raw station sums — RMSE of 23.30 bikes/hr is correct for this normalised scale (~50–500/hr range), not directly comparable to other cities' raw counts.
+
+### Chicago — `chicago/`
+
+- **Source:** [Divvy Bikes System Data](https://divvybikes.com/system-data) (quarterly CSVs, 2019–2022) + Open-Meteo historical API
+- **Coverage:** 2019–2022 (32,720 hourly rows; 37 of 38 quarters loaded — Q2-2019 skipped due to a different Divvy column schema)
+- **`chicago/trips/`** — raw Divvy quarterly CSV files (not committed to git — download from Divvy and extract here)
+- **`chicago_trips_hourly.csv`** — Divvy trips aggregated to DATE + HOUR (produced by `fetch_chicago_weather.py`)
+- **`chicago_weather.csv`** — Open-Meteo archive (lat=41.8781, lng=-87.6298, timezone=America/Chicago)
+- **`chicago_joined.csv`** — inner join of trips + weather on DATE + HOUR
+- Regenerate with: `python -m data.fetch_chicago_weather`
+
 ### `selected_cities.csv`
 
 - City metadata (name, coordinates, population) for the companion R Shiny dashboard
@@ -73,4 +105,5 @@ data/raw/
 - Files in this directory are the **single source of truth** — do not modify them
 - All normalisation to Seoul schema happens in `data/prepare_city_data.py`
 - Normalised outputs land in `data/processed/`
-- `dc/trips/` is excluded from git (large raw CSVs); all other files in this directory are tracked
+- **Gitignored raw downloads** (large, regenerable): `dc/trips/`, `chicago/trips/`, and `paris/[0-9]{4}*.csv` + `paris/comptage*.csv` patterns
+- **Tracked intermediate CSVs** (small, deterministic outputs of fetch scripts): every `<city>_trips_hourly.csv`, `<city>_weather.csv`, `<city>_joined.csv` is committed for reproducibility — same pattern across DC, Paris, and Chicago

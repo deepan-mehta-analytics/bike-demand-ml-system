@@ -11,8 +11,8 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v4.1.0 — 6-city automated test suite | ✅ Done | `dfcf872` |
-| **bike_demand_prediction** | R Shiny dashboard | v1.5.0 shipped — testthat suite (36 tests / 62 assertions) + GitHub Actions CI | ✅ Done | `edd97e3` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v4.1.0 — 6-city automated test suite; data layer aligned with DC pattern | ✅ Done | `8182313` |
+| **bike_demand_prediction** | R Shiny dashboard | v1.5.0 shipped — testthat suite (36 tests / 62 assertions) + GitHub Actions CI | ✅ Done | `9da4a6d` |
 
 ### Trained City Models
 
@@ -145,9 +145,11 @@ Both repos form a single portfolio system. Track them together here.
 
 ## 🚀 Next Step
 
-**v4.1.0 shipped (2026-05-18) — 6-city automated test suite.** 27 tests across 5 modules; CI Job 7 RMSE accuracy gates; all 7 CI jobs green. Last commit: `f82f098`.
+**v4.1.0 shipped (2026-05-18) — 6-city automated test suite.** 27 tests across 5 modules; CI Job 7 RMSE accuracy gates; all 7 CI jobs green. Last commit: `8182313` (data layer aligned with DC pattern — Paris + Chicago intermediates tracked, `mlruns/` gitignored).
 
-**Next priority:** v1.5.0 GitHub release on the Shiny repo (testthat milestone); then Seoul GBFS key registration (Priority 6) or Phase 8 (shinytest2 reactive testing).
+**Next priority (lead candidate): Seoul training-data refresh (v4.2.0).** Replace the stale UCI 2017-2018 Seoul training set with OA-15182 (Seoul 따릉이 rental history, 2015-2025 annual ZIPs from `data.seoul.go.kr`, no API key). Pattern mirrors the v1.4.0 Paris work — 3 sprints: fetch+prepare scripts, download 2022+2023+2024 ZIPs + retrain, verify + threshold update + release. Full dataset detail in project memory `project_seoul_dataset.md`. Recommend a fresh session for context-window headroom across the brainstorming → spec → plan → implement → review cycle.
+
+**Alternatives:** (a) Shiny Phase 8 / v1.7 — `shinytest2` browser harness; (b) verify/trigger Paris + Chicago promotion in MLflow Production registry (only 4 of 6 cities registered at v4.0.0 cut-off); (c) Shiny Priority 6 — upgrade Seoul **live station** feed from the 5-station `sample` key to a registered key (separate from the OA-15182 training refresh — different endpoint).
 
 *Phase 7 complete 2026-05-18 — commit 8bcdb4c. v1.4.0 Paris + Chicago shipped 2026-05-18 — commit d8ee4e0. Phase 5 (Vertex AI + MLflow) complete — v4.0.0 shipped 2026-05-17.*
 

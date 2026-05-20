@@ -372,3 +372,64 @@ def prepare_chicago_from_joined(path: str) -> pd.DataFrame:
         "RENTED_BIKE_COUNT",
     ]
     return df[seoul_cols].reset_index(drop=True)                       # return only schema columns; reset index
+
+
+# ── Seoul (OA-15182 — Tareungi Public Bicycle Rental History) ────────────────
+
+def prepare_seoul_from_joined(path: str) -> pd.DataFrame:
+    """Normalise a pre-joined Seoul OA-15182 trips + weather CSV to Seoul schema.
+
+    Expected input columns (produced by data/fetch_seoul_weather.py):
+        DATE                  — DD/MM/YYYY string
+        HOUR                  — integer 0-23
+        RENTED_BIKE_COUNT     — integer hourly trip count aggregated from OA-15182 per-trip rows
+        temperature_2m        — Celsius (Open-Meteo column name)
+        relative_humidity_2m  — percent
+        wind_speed_10m        — m/s (Open-Meteo with wind_speed_unit=ms)
+        precipitation         — mm
+        snowfall              — cm
+        dew_point_2m          — Celsius
+        SOLAR_RADIATION       — MJ/m^2 (pre-converted from shortwave_radiation in fetch_seoul_weather.py)
+        VISIBILITY            — int 2000 constant (pre-set in fetch_seoul_weather.py; no Open-Meteo equivalent)
+
+    The two pre-derived columns (SOLAR_RADIATION, VISIBILITY) pass through unchanged.
+    All other columns follow the same rename pattern as Paris / Chicago / DC / NYC.
+
+    Parameters:
+        path: local path to seoul_joined.csv
+
+    Returns:
+        DataFrame in Seoul schema ready to pass to models/train.py
+    """
+    df = pd.read_csv(path)                                             # load pre-joined trips + weather CSV
+
+    # ── Weather Features ─────────────────────────────────────────────────────
+    df["TEMPERATURE"] = df["temperature_2m"].astype(float)             # rename Open-Meteo column to Seoul name
+    df["HUMIDITY"] = df["relative_humidity_2m"].round().astype(int)    # round float humidity to nearest integer percent
+    df["WIND_SPEED"] = df["wind_speed_10m"].astype(float)              # Open-Meteo wind speed already in m/s
+    df["DEW_POINT_TEMPERATURE"] = df["dew_point_2m"].astype(float)     # rename Open-Meteo column
+    df["RAINFALL"] = df["precipitation"].astype(float)                 # rename precipitation to RAINFALL
+    df["SNOWFALL"] = df["snowfall"].astype(float)                      # rename snowfall column
+    # VISIBILITY and SOLAR_RADIATION come through pre-derived from fetch_seoul_weather.py — no edits here.
+
+    # ── Derived Categoricals ─────────────────────────────────────────────────
+    date_dt = pd.to_datetime(df["DATE"], dayfirst=True)                # parse DD/MM/YYYY for month-based derivation
+    month = date_dt.dt.month                                           # extract month number for season lookup
+    df["SEASONS"] = pd.cut(                                            # derive season from month-of-year
+        month,
+        bins=[0, 2, 5, 8, 11, 12],                                    # 1-2=Winter, 3-5=Spring, 6-8=Summer, 9-11=Autumn
+        labels=["Winter", "Spring", "Summer", "Autumn", "Winter"],     # season label per bin
+        ordered=False,
+    ).astype(str)                                                      # convert Categorical to plain strings
+    df["HOLIDAY"] = "No Holiday"                                       # consistency with all other non-Seoul cities (signal loss accepted)
+    df["FUNCTIONING_DAY"] = "Yes"                                      # Seoul Tareungi operates year-round
+
+    # ── Select and Return Seoul Schema Columns ────────────────────────────────
+    seoul_cols = [                                                     # ordered list of Seoul schema column names
+        "DATE", "HOUR", "TEMPERATURE", "HUMIDITY", "WIND_SPEED",
+        "VISIBILITY", "DEW_POINT_TEMPERATURE", "SOLAR_RADIATION",
+        "RAINFALL", "SNOWFALL",
+        "SEASONS", "HOLIDAY", "FUNCTIONING_DAY",
+        "RENTED_BIKE_COUNT",
+    ]
+    return df[seoul_cols].reset_index(drop=True)                       # return only schema columns; reset index

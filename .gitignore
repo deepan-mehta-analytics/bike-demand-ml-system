@@ -28,3 +28,10 @@ data/raw/chicago/trips/
 # MLflow local tracking directory — created by DRY_RUN runs of retrain_job.py;
 # ephemeral SQLite + run-artifact tree, regenerable from any training run. Not for git.
 mlruns/
+
+# Raw Seoul OA-15182 annual ZIP attachments — multi-GB downloads; regenerate via fetch_seoul_weather.py
+data/raw/seoul/[0-9][0-9][0-9][0-9]*.zip
+
+# Extracted Seoul OA-15182 year CSVs — large per-trip files; regenerate via fetch_seoul_weather.py
+# Script globs all [0-9]{4}*.csv in data/raw/seoul/ — ignore year-prefixed source files, keep intermediate outputs
+data/raw/seoul/[0-9][0-9][0-9][0-9]*.csv

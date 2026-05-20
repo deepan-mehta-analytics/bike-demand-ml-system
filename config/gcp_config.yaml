@@ -70,7 +70,7 @@ retraining:
   rmse_improvement_threshold: 0.97
   cities:
     - name: "seoul"                   # city identifier — matches artifact directory name
-      data_path: "data/raw/seoul/seoul_bike_sharing.csv"  # UCI Seoul Bike Sharing dataset
+      data_path: "data/processed/seoul_bike_sharing.csv"  # Seoul OA-15182 따릉이 + Open-Meteo (Jan 2022 - Dec 2024)
     - name: "london"                  # city identifier
       data_path: "data/processed/london_bike_sharing.csv"  # Kaggle london_merged.csv (prepared)
     - name: "nyc"                     # city identifier

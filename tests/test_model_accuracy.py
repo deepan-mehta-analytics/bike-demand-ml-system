@@ -11,9 +11,9 @@ from models.features import create_features, get_feature_target  # shared featur
 # Each tuple: (csv_path, city_label, rmse_threshold)
 # Thresholds carry ~50% headroom above trained RMSE to absorb minor random-state variance
 # while still catching meaningful data-quality or feature-pipeline regressions.
-# Seoul uses the raw CSV (uppercase schema); all others use data/processed/ (also uppercase).
+# All six cities load from data/processed/ (uppercase Seoul schema).
 _CITY_CONFIGS = [
-    ("data/raw/seoul/seoul_bike_sharing.csv",  "seoul",   450),  # chrono-split RMSE 328.84; threshold 450
+    ("data/processed/seoul_bike_sharing.csv",  "seoul",  2200),  # trained RMSE 1503.52; threshold 2200
     ("data/processed/london_bike_sharing.csv", "london",  350),  # trained RMSE 228.58; threshold 350
     ("data/processed/nyc_bike_sharing.csv",    "nyc",     500),  # trained RMSE 345.69; threshold 500
     ("data/processed/dc_bike_sharing.csv",     "dc",      150),  # trained RMSE  97.47; threshold 150

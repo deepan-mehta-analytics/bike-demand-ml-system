@@ -34,10 +34,8 @@ COPY models/ ./models/
 COPY pipeline/ ./pipeline/
 COPY config/ ./config/
 
-# Copy Seoul raw CSV — baked into image; Vertex AI job needs no GCS data fetch.
-COPY data/raw/seoul/ ./data/raw/seoul/
-
-# Copy processed CSVs for London, NYC, and DC — prepared and committed to the repo.
+# Copy processed city CSVs — baked into image; Vertex AI job needs no GCS data fetch.
+COPY data/processed/seoul_bike_sharing.csv ./data/processed/
 COPY data/processed/london_bike_sharing.csv ./data/processed/
 COPY data/processed/nyc_bike_sharing.csv ./data/processed/
 COPY data/processed/dc_bike_sharing.csv ./data/processed/

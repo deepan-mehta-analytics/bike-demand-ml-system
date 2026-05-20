@@ -8,19 +8,18 @@ Seoul-schema CSVs ready for `models/train.py`, plus two legacy files from the or
 
 ### Active — multi-city training inputs
 
-These three files share an identical 14-column Seoul schema and are passed directly to `models/train.py --city <name> --data <path>`.
+These six files share an identical 14-column Seoul schema and are passed directly to `models/train.py --city <name> --data <path>`.
 
 | File | City | Rows | Source | How to regenerate |
 |---|---|---|---|---|
+| `seoul_bike_sharing.csv` | Seoul | 26,303 | `data/raw/seoul/seoul_joined.csv` | `python -m data.fetch_seoul_weather` |
 | `london_bike_sharing.csv` | London | 17,414 | `data/raw/london/london_merged.csv` | `prepare_city_data.prepare_london()` |
 | `nyc_bike_sharing.csv` | NYC | 34,187 | `data/raw/nyc/nyc_joined.csv` | `python -m data.fetch_nyc_weather` |
 | `dc_bike_sharing.csv` | Washington DC | 37,663 | `data/raw/dc/dc_joined.csv` | `python data/fetch_dc_weather.py` |
 | `paris_bike_sharing.csv` | Paris | 26,297 | `data/raw/paris/paris_joined.csv` | `python -m data.fetch_paris_weather` |
 | `chicago_bike_sharing.csv` | Chicago | 32,720 | `data/raw/chicago/chicago_joined.csv` | `python -m data.fetch_chicago_weather` |
 
-Seoul itself (`data/raw/seoul/seoul_bike_sharing.csv`) is already in Seoul schema and is loaded directly by `models/train.py` without a processed intermediate.
-
-**Seoul schema** — 14 columns common to all four files:
+**Seoul schema** — 14 columns common to all six files:
 
 ```
 DATE (DD/MM/YYYY), HOUR (0-23),

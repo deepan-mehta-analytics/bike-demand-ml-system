@@ -25,7 +25,7 @@ COPY --chown=appuser:appuser . .
 # trains all four city models during the image build; .pkl files are baked into
 # the image layer — no volume mount is required at runtime
 USER appuser
-RUN python -m models.train --city seoul --data data/raw/seoul/seoul_bike_sharing.csv && \
+RUN python -m models.train --city seoul --data data/processed/seoul_bike_sharing.csv && \
     python -m models.train --city london --data data/processed/london_bike_sharing.csv && \
     python -m models.train --city nyc --data data/processed/nyc_bike_sharing.csv && \
     python -m models.train --city dc --data data/processed/dc_bike_sharing.csv && \

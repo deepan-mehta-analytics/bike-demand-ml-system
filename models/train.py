@@ -25,7 +25,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(                                               # path to city's prepared CSV
         "--data",
         type=str,
-        default="data/raw/seoul/seoul_bike_sharing.csv",
+        default="data/processed/seoul_bike_sharing.csv",
         help="Path to the city CSV in Seoul-schema format (see data/prepare_city_data.py for other cities)",
     )
     parser.add_argument(                                               # number of trees; affects speed vs accuracy

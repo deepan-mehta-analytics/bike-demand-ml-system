@@ -167,7 +167,7 @@ def _aggregate_one_year(path: Path) -> pd.DataFrame:
           .groupby(["DATE", "HOUR"], as_index=False)["RENTED_BIKE_COUNT"]
           .sum()
     )
-    print(f"    → {len(yearly):,} hourly rows")                        # tiny output: ~8,760 rows per full year
+    print(f"    -> {len(yearly):,} hourly rows")                       # tiny output: ~8,760 rows per full year
     return yearly
 
 
@@ -232,7 +232,7 @@ def fetch_weather() -> pd.DataFrame:
     df["VISIBILITY"] = _VISIBILITY_DEFAULT                                          # constant 2000 (Open-Meteo has no equivalent)
 
     df.to_csv(WEATHER_CSV, index=False)                                # persist weather CSV
-    print(f"Saved {len(df):,} rows → {WEATHER_CSV}")
+    print(f"Saved {len(df):,} rows -> {WEATHER_CSV}")
     return df
 
 
@@ -249,7 +249,7 @@ def join_trips_weather(trips: pd.DataFrame, weather: pd.DataFrame) -> pd.DataFra
         )
 
     joined.to_csv(JOINED_CSV, index=False)                             # persist joined CSV
-    print(f"Joined: {len(joined):,} rows → {JOINED_CSV}")
+    print(f"Joined: {len(joined):,} rows -> {JOINED_CSV}")
     return joined
 
 
@@ -269,7 +269,7 @@ def prepare_and_assert(joined_path: Path) -> pd.DataFrame:
     )
 
     df_out.to_csv(OUTPUT_CSV, index=False)                             # write final training-ready CSV
-    print(f"Final: {len(df_out):,} rows → {OUTPUT_CSV}")
+    print(f"Final: {len(df_out):,} rows -> {OUTPUT_CSV}")
     print(f"Columns: {list(df_out.columns)}")                          # confirm all 14 Seoul-schema columns
     return df_out
 

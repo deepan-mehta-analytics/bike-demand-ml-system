@@ -36,8 +36,12 @@ Notes on schema choices (see spec sections 7.6 and 7.8):
   - VISIBILITY: Open-Meteo has no equivalent variable; this script writes a
     constant 2000 (UCI 10m-unit scale: ~20 km, "good visibility"). The RF
     sees zero variance on this column and effectively ignores it.
-  - Korea has no DST → Asia/Seoul timestamps are converted to UTC with
-    ambiguous="infer", nonexistent="shift_forward".
+  - Korea has no DST → Asia/Seoul tz is attached via tz_localize with
+    ambiguous="infer", nonexistent="shift_forward" (effectively a label
+    attachment, no hour shift). Times stay in Seoul wall-clock to align
+    with Open-Meteo (also fetched with timezone="Asia/Seoul") on the
+    (DATE, HOUR) inner-join key. A previous UTC conversion silently
+    misaligned trips vs weather by 9 hours and was removed.
 """
 
 # ── Imports ───────────────────────────────────────────────────────────────────
@@ -146,11 +150,12 @@ def _aggregate_one_year(path: Path) -> pd.DataFrame:
         chunk = chunk.assign(_ts=ts).dropna(subset=["_ts"])            # drop unparseable rows up front
 
         if chunk["_ts"].dt.tz is None:                                 # if timestamps are tz-naive
-            chunk["_ts"] = (                                           # localise to Korea, then convert to UTC
+            chunk["_ts"] = (                                           # attach Asia/Seoul tz (Korea has no DST; label only, no hour shift)
                 chunk["_ts"]
                 .dt.tz_localize("Asia/Seoul", ambiguous="infer", nonexistent="shift_forward")
             )
-        chunk["_ts"] = chunk["_ts"].dt.tz_convert("UTC")               # all downstream work in UTC for clean Open-Meteo join
+        # Stay in Seoul wall-clock — Open-Meteo weather is also Asia/Seoul, so the (DATE, HOUR) join aligns.
+        # A previous tz_convert("UTC") here silently shifted trip hours by 9, corrupting the hour-of-day signal.
 
         chunk["DATE"] = chunk["_ts"].dt.strftime("%d/%m/%Y")           # DD/MM/YYYY (Seoul schema)
         chunk["HOUR"] = chunk["_ts"].dt.hour                           # integer hour 0-23

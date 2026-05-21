@@ -39,12 +39,15 @@ data/raw/
 
 ## City Sources
 
-### Seoul — `seoul/seoul_bike_sharing.csv`
+### Seoul — `seoul/`
 
-- **Source:** [UCI ML Repository — Seoul Bike Sharing Demand](https://archive.ics.uci.edu/dataset/560/seoul+bike+sharing+demand)
-- **Coverage:** Dec 2017 – Nov 2018 (8,760 hourly rows)
-- **Format:** Already in Seoul schema — used directly by `models/train.py`
-- **Columns:** DATE (DD/MM/YYYY), HOUR, TEMPERATURE, HUMIDITY, WIND_SPEED, VISIBILITY, DEW_POINT_TEMPERATURE, SOLAR_RADIATION, RAINFALL, SNOWFALL, SEASONS, HOLIDAY, FUNCTIONING_DAY, RENTED_BIKE_COUNT
+- **Source:** [Seoul Open Data Plaza — 따릉이 대여이력 (OA-15182)](https://data.seoul.go.kr/dataList/OA-15182/F/1/datasetView.do) + Open-Meteo historical API
+- **Coverage:** Jan 2022 – Dec 2024 (26,303 hourly rows after join)
+- **Raw monthly CSVs** — 36 files named `YYYY-MM.csv` (cp949-encoded per-trip logs, ~23 GB total); downloaded as annual ZIPs from data.seoul.go.kr and gitignored
+- **`seoul_trips_hourly.csv`** — aggregated hourly trip counts; columns: DATE (DD/MM/YYYY), HOUR, RENTED_BIKE_COUNT
+- **`seoul_weather.csv`** — Open-Meteo archive (lat=37.57, lng=126.98, timezone=Asia/Seoul); columns: DATE, HOUR + 7 weather variables
+- **`seoul_joined.csv`** — inner join of the above two files on DATE + HOUR
+- Regenerate with: `python -m data.fetch_seoul_weather`
 
 ### London — `london/london_merged.csv`
 

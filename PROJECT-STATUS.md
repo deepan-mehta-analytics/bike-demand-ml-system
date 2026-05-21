@@ -11,14 +11,14 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v4.1.0 — 6-city automated test suite; data layer aligned with DC pattern | ✅ Done | `8182313` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v4.2.0 — Seoul training data refresh (OA-15182 + Open-Meteo, 2022-2024) | ✅ Done | `64ac1d2` |
 | **bike_demand_prediction** | R Shiny dashboard | v1.5.0 shipped — testthat suite (36 tests / 62 assertions) + GitHub Actions CI | ✅ Done | `9da4a6d` |
 
 ### Trained City Models
 
 | City | Dataset | Rows | RMSE | Top Feature | Artifacts |
 |------|---------|------|------|-------------|-----------|
-| Seoul | UCI Seoul Bike Sharing | 8,760 | **328.84** | TEMPERATURE (0.40) | `models/artifacts/seoul/` |
+| Seoul | OA-15182 + Open-Meteo (2022-2024) | 26,303 | **1,503.52** | HOUR (0.468) | `models/artifacts/seoul/` |
 | London | Kaggle london_merged.csv | 17,414 | **316.56** | HOUR (0.71) | `models/artifacts/london/` |
 | NYC | BigQuery citibike_trips (2014–2018) + Open-Meteo | 34,187 | **470.76** | HOUR (0.52) | `models/artifacts/nyc/` |
 | Washington DC | Capital Bikeshare CSVs (2014–2018) + Open-Meteo | 37,663 | **119.31** | HOUR (0.62) | `models/artifacts/dc/` |
@@ -36,17 +36,19 @@ Both repos form a single portfolio system. Track them together here.
 | ~~3~~ | bike_demand_prediction | ~~Feed Health Alerting — GBFS feed status panel~~ | ~~v1.3.0~~ | **✅ Shipped (2026-05-17)** |
 | ~~4~~ | bike_demand_prediction | ~~Backlog — Paris/Chicago models~~ | ~~v1.4.0~~ | **✅ Shipped (2026-05-18)** |
 | ~~5~~ | bike-demand-ml-system | ~~Phase 7 — Automated Test Suite (pytest)~~ | ~~—~~ | **✅ Shipped (2026-05-18)** |
-| **6** | bike_demand_prediction | Backlog — Seoul GBFS | — | External API key |
-| **7** | bike_demand_prediction | Backlog — City expansion (SF/Amsterdam) | — | Data sourcing required |
+| ~~5.5~~ | bike-demand-ml-system | ~~Phase 13 — Seoul training data refresh (OA-15182 + Open-Meteo)~~ | ~~v4.2.0~~ | **✅ Shipped (2026-05-21)** |
+| **6** | bike-demand-ml-system | 4-city analogous timezone bug fix (Paris/Chicago/NYC/DC) | v4.3.0 | — |
+| **7** | bike_demand_prediction | Backlog — Seoul GBFS | — | External API key |
+| **8** | bike_demand_prediction | Backlog — City expansion (SF/Amsterdam) | — | Data sourcing required |
 
 ---
 
 ## ✅ Completed
 
 ### ML Pipeline
-* Seoul Bike Sharing dataset (UCI, 8,760 hourly rows) ingested; DD/MM datetime parsing
+* Seoul training data refreshed (v4.2.0): OA-15182 (Seoul Open Data Plaza, 2022-2024) + Open-Meteo, 26,303 hourly rows after join; DD/MM datetime parsing
 * Feature engineering: `year`, `month`, `day`, `dayofweek` + one-hot (`SEASONS`, `HOLIDAY`, `FUNCTIONING_DAY`)
-* Random Forest baseline: RMSE **328.84** bikes/hr (Seoul, chronological 80/20 split); scaler removed (RF is scale-invariant)
+* Random Forest baseline: RMSE **1,503.52** bikes/hr (Seoul, chronological 80/20 split, 21,042 train / 5,261 test); scaler removed (RF is scale-invariant)
 * Feature schema persisted at training time — no train/serve skew at inference
 
 ### API + Service Layer
@@ -124,6 +126,18 @@ Both repos form a single portfolio system. Track them together here.
 * `.github/workflows/ci.yml` Job 7 (`accuracy`) — parallel to Job 2, push to main only; ~5 min wall time
 * All 7 CI jobs green on push to main ✅
 
+### Phase 13 — Seoul Training Data Refresh ✅ Done (v4.2.0 — commit 64ac1d2)
+* **Replaces stale UCI 2017-2018 Seoul training set** with OA-15182 (Seoul 따릉이 rental history, 2022-2024) joined to Open-Meteo historical weather; 26,303 hourly rows; mirrors v1.4.0 Paris pattern
+* `data/fetch_seoul_weather.py` — aggregates 36 monthly CSVs (cp949-encoded, ~23 GB) to hourly trip counts; joins to Open-Meteo archive (lat=37.57, lng=126.98, timezone=Asia/Seoul); writes `data/processed/seoul_bike_sharing.csv`
+* `data/prepare_city_data.py::prepare_seoul_from_joined()` — Seoul-schema normaliser for the joined CSV
+* **Timezone bug caught + fixed mid-sprint (commit `176e182`)** — removed `tz_convert("UTC")` on trips before joining with Asia/Seoul weather; restored proper diurnal signal (HOUR=18 mean RBC 11,716 vs HOUR=4 mean 625)
+* **RMSE 1,503.52 bikes/hr** (Seoul, chronological split) vs UCI baseline 328.84 — honest figure on ~7× scale + 3-year window; HOUR feature importance climbed to 0.468 (vs 0.287 UCI)
+* `tests/test_model_accuracy.py` — Seoul threshold raised 450 → 2,200 (~46% headroom); 5 path references rewired from `data/raw/seoul/seoul_bike_sharing.csv` → `data/processed/seoul_bike_sharing.csv` (tests, Dockerfile, Dockerfile.training, gcp_config.yaml, models/train.py, data/processed/README.md)
+* `Dockerfile.training` — removed standalone `COPY data/raw/seoul/` directive (was about to copy 23 GB raw monthly CSVs into image)
+* README + data/raw/README.md staleness sweep — zero remaining "UCI Seoul / 8,760 / 328.84" references outside `docs/superpowers/` historical specs
+* 23 GB raw monthly CSVs deleted locally post-train (re-fetchable from data.seoul.go.kr); `.gitignore` updated to catch year-prefixed CSVs
+* GitHub release v4.2.0 published
+
 ### Phase 5 — Vertex AI + Experiment Tracking ✅ Done (v4.0.0 — commit d5c2a54)
 * **Code shipped 2026-05-16** — spec: `docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`
 * `pipeline/retrain_job.py` — 6-combo hyperparameter sweep per city; SQLite+GCS MLflow tracking; RMSE gate (0.97); DRY_RUN mode
@@ -145,12 +159,12 @@ Both repos form a single portfolio system. Track them together here.
 
 ## 🚀 Next Step
 
-**v4.1.0 shipped (2026-05-18) — 6-city automated test suite.** 27 tests across 5 modules; CI Job 7 RMSE accuracy gates; all 7 CI jobs green. Last commit: `8182313` (data layer aligned with DC pattern — Paris + Chicago intermediates tracked, `mlruns/` gitignored).
+**v4.2.0 shipped (2026-05-21) — Seoul training data refresh (OA-15182 + Open-Meteo, 2022-2024).** 3 commits: `176e182` (timezone bug fix), `b17751c` (data refresh + README rewrite), `64ac1d2` (test threshold + 5 path rewires). New Seoul RMSE 1,503.52 bikes/hr on 26,303 hourly rows (vs UCI baseline 328.84 on 8,760 rows). All 7 CI jobs green; FastAPI smoke test verified 3 README predictions to float-exact match.
 
-**Next priority (lead candidate): Seoul training-data refresh (v4.2.0).** Replace the stale UCI 2017-2018 Seoul training set with OA-15182 (Seoul 따릉이 rental history, 2015-2025 annual ZIPs from `data.seoul.go.kr`, no API key). Pattern mirrors the v1.4.0 Paris work — 3 sprints: fetch+prepare scripts, download 2022+2023+2024 ZIPs + retrain, verify + threshold update + release. Full dataset detail in project memory `project_seoul_dataset.md`. Recommend a fresh session for context-window headroom across the brainstorming → spec → plan → implement → review cycle.
+**Next priority (lead candidate): 4-city analogous timezone bug fix (v4.3.0).** `fetch_paris_weather.py`, `fetch_chicago_weather.py`, `fetch_nyc_weather.py`, and `fetch_dc_weather.py` all use the same `tz_localize → tz_convert("UTC")` pattern paired with Open-Meteo `timezone=<local>` — predictions are time-biased by 1-6 hours depending on the city. Existing models pass tests but the diurnal signal is shifted. Estimated 2-3 sessions (S6-S8) — 4-city re-fetch + retrain + threshold updates + README per-city table updates.
 
-**Alternatives:** (a) Shiny Phase 8 / v1.7 — `shinytest2` browser harness; (b) verify/trigger Paris + Chicago promotion in MLflow Production registry (only 4 of 6 cities registered at v4.0.0 cut-off); (c) Shiny Priority 6 — upgrade Seoul **live station** feed from the 5-station `sample` key to a registered key (separate from the OA-15182 training refresh — different endpoint).
+**Alternatives:** (a) Cosmetic train.py stdout sweep (`Training RF model �` cp1252 char in `train.py`); (b) MAE rows in NYC/DC RF tables for cross-city alignment (Seoul has MAE post-v4.2.0); (c) Shiny Phase 8 / v1.7 — `shinytest2` browser harness; (d) verify/trigger Paris + Chicago promotion in MLflow Production registry (only 4 of 6 cities registered at v4.0.0 cut-off); (e) Shiny Priority 6 — upgrade Seoul **live station** feed from the 5-station `sample` key to a registered key.
 
-*Phase 7 complete 2026-05-18 — commit 8bcdb4c. v1.4.0 Paris + Chicago shipped 2026-05-18 — commit d8ee4e0. Phase 5 (Vertex AI + MLflow) complete — v4.0.0 shipped 2026-05-17.*
+*v4.2.0 Seoul refresh shipped 2026-05-21 — commit 64ac1d2. Phase 7 complete 2026-05-18 — commit 8bcdb4c. v1.4.0 Paris + Chicago shipped 2026-05-18 — commit d8ee4e0. Phase 5 (Vertex AI + MLflow) complete — v4.0.0 shipped 2026-05-17.*
 
 Resume with: `"resume bike-demand-ml-system — check workflow_status.md and pick up from the next pending action"`

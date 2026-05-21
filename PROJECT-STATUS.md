@@ -66,14 +66,14 @@ Both repos form a single portfolio system. Track them together here.
 * `data/prepare_city_data.py`: `prepare_london()`, `nyc_bigquery_sql()`, `prepare_nyc_from_joined()`, `prepare_dc_from_joined()`
 * `data/fetch_dc_weather.py`: Capital Bikeshare trip aggregation + Open-Meteo join + Seoul-schema prepare for DC
 * **Washington DC**: Capital Bikeshare CSVs (2014–2018) + Open-Meteo join via `data/fetch_dc_weather.py`; RMSE **119.31** bikes/hr (chronological split); HOUR dominates (0.62); 37,663 hourly rows
-* `data/raw/` restructured: per-city subfolders (`seoul/`, `london/`, `nyc/`, `dc/trips/`); `requests` added to `requirements.txt`
+* `data/raw/` restructured: per-city subfolders (`seoul/`, `london/`, `nyc/`, `dc/trips/`, `paris/`, `chicago/`); `requests` added to `requirements.txt`
 
 ### Infrastructure (containerisation + CI)
-* `requirements.txt` — 10 packages pinned; `pytest.ini` — `pythonpath = .`
+* `requirements.txt` — 12 packages pinned (FastAPI / uvicorn / scikit-learn / pandas / joblib / pydantic / pytest / httpx / ruff / anyio / requests / prometheus-fastapi-instrumentator); `pytest.ini` — `pythonpath = .`
 * 27 tests: 9 unit (features) + 5 API integration + 1 city default + 6 RMSE gates (`-m slow`) + 5 routing + 1 schema frozen-set guard
 * `Dockerfile` — `python:3.11-slim`, non-root `appuser`, stdlib health check; inline comments moved to standalone lines (Docker parse fix, commit `1ae284f`)
 * `docker-compose.yml` — fastapi service, port 8000, `USE_PUBSUB=false`; volume mount removed (artifacts baked into image)
-* `.github/workflows/ci.yml` — ruff lint → pytest (trains Seoul model) → docker build → push to GHCR; all 4 jobs green on push to main
+* `.github/workflows/ci.yml` — 7 jobs: `lint` (ruff), `test` (pytest fast — trains Seoul model as fixture), `docker` (image build), `publish` (push to GHCR), `publish-gar` (push to GAR + redeploy Cloud Run on merge to main), `build-training-container` (push Vertex AI training image to GAR), `accuracy` (RMSE gates across all 6 cities, push to main only); all jobs green on the latest push
 
 ---
 
@@ -91,7 +91,7 @@ Both repos form a single portfolio system. Track them together here.
 ## 🔜 Roadmap
 
 ### Phase 3 — Cloud Run Deployment ✅ DONE
-* [x] All 4 city models baked into Docker image at build time — no volume mount required
+* [x] All 6 city models baked into Docker image at build time — `Dockerfile:28-33` runs `python -m models.train` once per city during the image build; no volume mount required
 * [x] `docker-compose.yml` — volume section removed; image is self-contained
 * [x] CI publish job — `docker/build-push-action` pushes `ghcr.io/deepan-mehta-analytics/bike-demand-ml-system:{latest,sha}` to GHCR on merge to main; uses auto-injected `GITHUB_TOKEN` (no manual secrets required)
 * [x] CI Job 5 (`publish-gar`) added — builds and pushes to GAR + redeploys Cloud Run on every merge to main; requires `GCP_SA_KEY` GitHub secret
@@ -162,13 +162,12 @@ Both repos form a single portfolio system. Track them together here.
 * `models/train.py` — chronological 80/20 split (correctness fix); MAE added to evaluation
 * `ci.yml` Job 6 — builds + pushes `bike-demand-training` image to GAR on merge to main — ✅ green (run 25970193112)
 * **GCP provisioned (2026-05-17):**
-  - Vertex AI API enabled; `vertex-sa` SA with `roles/aiplatform.user` + GCS objectAdmin; Vertex AI service agent granted `roles/artifactregistry.reader`
+  - Vertex AI API enabled; `vertex-sa` SA with `roles/aiplatform.user` + GCS objectAdmin; Vertex AI service agent `service-246440913351@gcp-sa-aiplatform.iam.gserviceaccount.com` granted `roles/artifactregistry.reader` (post-first-job IAM, applied 2026-05-17)
   - `bike-demand-trigger` Cloud Run deployed at `https://bike-demand-trigger-246440913351.us-central1.run.app`
   - Cloud Scheduler job `bike-demand-weekly-retrain` — every Sunday 02:00 UTC
   - Cloud Monitoring: email channel `deepanmehta@live.com`; log-based alerts for job failure + running state
-* **Verification complete (2026-05-17):** Vertex AI job ran ~10 min; all 4 cities registered in MLflow Production; `gs://bike-demand-staging/mlflow/mlflow.db` uploaded; `gs://bike-demand-staging/mlflow/artifacts/` has 47 model.pkl files across 4 city dirs
+* **Verification complete (2026-05-17):** Vertex AI job ran ~10 min; **4 of 6 cities** (Seoul / London / NYC / DC) registered in MLflow Production at v4.0.0 cut-off; `gs://bike-demand-staging/mlflow/mlflow.db` uploaded; `gs://bike-demand-staging/mlflow/artifacts/` has 47 model.pkl files across 4 city dirs. **Paris and Chicago** train via the same Vertex AI job but `Dockerfile.training:38-41` only copies 4 city CSVs — promotion to MLflow Production is open candidate (b) in Next Step.
 * GitHub release v4.0.0 published (2026-05-17)
-* **Post-first-job:** Add `roles/artifactregistry.reader` to Vertex AI service agent `service-246440913351@gcp-sa-aiplatform.iam.gserviceaccount.com`
 
 ---
 

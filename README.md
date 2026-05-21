@@ -124,7 +124,7 @@ bike-demand-ml-system/
 │   │   ├── nyc/                            ← BigQuery export + Open-Meteo weather + joined CSV
 │   │   ├── dc/                             ← Capital Bikeshare CSVs + Open-Meteo weather + joined CSV
 │   │   │   └── trips/                      ← raw quarterly/annual Capital Bikeshare CSVs
-│   │   ├── paris/                          ← Vélib' annual ZIPs (2022–2024) + Open-Meteo weather
+│   │   ├── paris/                          ← Vélib' annual ZIPs (2023–2024; 2022 dropped) + Open-Meteo weather
 │   │   └── chicago/                        ← Divvy quarterly CSVs (2019–2022) + Open-Meteo weather
 │   └── processed/                      ← Seoul-schema CSVs ready for models/train.py
 │
@@ -289,7 +289,7 @@ docker compose up --build
 
 ### 📦 Option 3 — Pull from GitHub Container Registry
 
-Pre-built image with all four city models baked in. Published automatically on every merge to `main` via GitHub Actions — no manual build required.
+Pre-built image with all 6 city models baked in. Published automatically on every merge to `main` via GitHub Actions — no manual build required.
 
 ```bash
 docker pull ghcr.io/deepan-mehta-analytics/bike-demand-ml-system:latest
@@ -440,7 +440,7 @@ All RMSEs use a chronological 80/20 split (oldest 80% → train, newest 20% → 
 | London | Kaggle London Bike Sharing | 17,414 | **316.56** | HOUR (0.71) | ✅ Trained |
 | NYC | BigQuery `new_york_citibike` + Open-Meteo | 34,187 | **470.76** | HOUR (0.52) | ✅ Trained |
 | Washington DC | Capital Bikeshare CSVs + Open-Meteo | 37,663 | **119.31** | HOUR (0.62) | ✅ Trained |
-| Paris | Vélib' Métropole open data (MEAN scale) + Open-Meteo | 26,297 | **23.30** | HOUR (0.63) | ✅ Trained |
+| Paris | Vélib' Métropole open data (MEAN scale) + Open-Meteo | 17,539 | **20.51** | HOUR (0.71) | ✅ Trained |
 | Chicago | Divvy Bikes CSVs + Open-Meteo | 32,720 | **202.99** | HOUR (0.39) | ✅ Trained |
 
 NYC is the most hour-driven city after DC and Paris — HOUR accounts for 52% of feature importance, reflecting New York's dense commuter cycling pattern. Higher RMSE vs Seoul/London/DC reflects NYC's larger absolute trip volumes.
@@ -449,7 +449,7 @@ London's model is dominated by HOUR (0.71), reflecting London's strong commuter 
 
 Washington DC's RMSE of 119.31 is among the lowest — Capital Bikeshare is a smaller system than NYC, so absolute hourly counts are lower. HOUR dominates (0.62), consistent with a strong commuter pattern.
 
-Paris RMSE (23.30) is low because the Vélib' source data uses a normalised MEAN station counter (individual station average ~50–500 bikes/hr), not city-wide summed volume.
+Paris RMSE (20.51) is low because the Vélib' source data uses a normalised MEAN station counter (individual station average ~50–500 bikes/hr), not city-wide summed volume. The v4.3.0 timezone fix (mirroring the Seoul precedent) aligned trips to Paris-local wall-clock time so the join with Open-Meteo weather is hour-accurate; the same release dropped 2022 source data as a data-quality gate after the export was found to peak 2h later than 2023+2024 in both AM and PM rush across DST seasons (an intrinsic provider-side aggregation difference). HOUR dominance rose to 0.71 — the same family of commuter-driven patterns seen in London (0.71), DC (0.62), NYC (0.52), and Seoul (0.47).
 
 See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL + `data/fetch_nyc_weather.py` / `data/fetch_dc_weather.py` for the Open-Meteo join scripts.
 
@@ -684,7 +684,7 @@ Spec: [`docs/superpowers/specs/2026-05-18-pytest-suite-design.md`](docs/superpow
 
 ## 📂 Dataset
 
-Four city datasets are normalised to a common 14-column Seoul schema before training. All processed files live in `data/processed/`.
+Six city datasets are normalised to a common 14-column Seoul schema before training. All processed files live in `data/processed/`.
 
 | City | Source | Rows | Period | Notes |
 |------|--------|------|--------|-------|
@@ -692,7 +692,7 @@ Four city datasets are normalised to a common 14-column Seoul schema before trai
 | **London** | [Kaggle London Bike Sharing](https://www.kaggle.com/datasets/hmavrodiev/london-bike-sharing-dataset) | 17,414 | Jan 2015 – Jan 2017 | 3 meteorological columns absent (zeroed) |
 | **NYC** | [BigQuery `new_york_citibike`](https://console.cloud.google.com/marketplace/product/city-of-new-york/nyc-citi-bike) + [Open-Meteo](https://open-meteo.com/) | 34,187 | Jan 2014 – Dec 2018 | Trip counts from BigQuery; weather joined via `fetch_nyc_weather.py` |
 | **Washington DC** | [Capital Bikeshare system data](https://capitalbikeshare.com/system-data) + [Open-Meteo](https://open-meteo.com/) | 37,663 | Jan 2014 – Dec 2018 | Trip counts aggregated from quarterly CSVs; weather joined via `fetch_dc_weather.py` |
-| **Paris** | [Paris OpenData Vélib' Métropole counter ZIPs](https://opendata.paris.fr) + [Open-Meteo](https://open-meteo.com/) | 26,297 | 2022–2024 | Annual historical ZIPs (2022+2023+2024); MEAN station counter scale; joined via `fetch_paris_weather.py` |
+| **Paris** | [Paris OpenData Vélib' Métropole counter ZIPs](https://opendata.paris.fr) + [Open-Meteo](https://open-meteo.com/) | 17,539 | 2023–2024 | Annual historical ZIPs (2023+2024); MEAN station counter scale; joined via `fetch_paris_weather.py`. 2022 export dropped in v4.3.0 as a data-quality gate (peaked 2h later than 2023+2024 in both AM and PM rush across DST seasons — intrinsic to the provider's aggregation pipeline; reversible if root cause identified). |
 | **Chicago** | [Divvy Bikes system data](https://divvybikes.com/system-data) + [Open-Meteo](https://open-meteo.com/) | 32,720 | 2019–2022 | Quarterly CSVs (37/38 quarters; Q2-2019 skipped — different schema); joined via `fetch_chicago_weather.py` |
 
 **Shared schema (14 columns):** `DATE`, `HOUR`, `TEMPERATURE`, `HUMIDITY`, `WIND_SPEED`, `VISIBILITY`, `DEW_POINT_TEMPERATURE`, `SOLAR_RADIATION`, `RAINFALL`, `SNOWFALL`, `SEASONS`, `HOLIDAY`, `FUNCTIONING_DAY`, `RENTED_BIKE_COUNT`

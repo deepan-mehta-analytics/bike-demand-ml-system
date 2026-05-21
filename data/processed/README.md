@@ -16,7 +16,7 @@ These six files share an identical 14-column Seoul schema and are passed directl
 | `london_bike_sharing.csv` | London | 17,414 | `data/raw/london/london_merged.csv` | `prepare_city_data.prepare_london()` |
 | `nyc_bike_sharing.csv` | NYC | 34,187 | `data/raw/nyc/nyc_joined.csv` | `python -m data.fetch_nyc_weather` |
 | `dc_bike_sharing.csv` | Washington DC | 37,663 | `data/raw/dc/dc_joined.csv` | `python data/fetch_dc_weather.py` |
-| `paris_bike_sharing.csv` | Paris | 26,297 | `data/raw/paris/paris_joined.csv` | `python -m data.fetch_paris_weather` |
+| `paris_bike_sharing.csv` | Paris | 17,539 | `data/raw/paris/paris_joined.csv` | `python -m data.fetch_paris_weather` (2022 export dropped at fetch time as a data-quality gate — see `data/raw/README.md` Paris section for the Option B note) |
 | `chicago_bike_sharing.csv` | Chicago | 32,720 | `data/raw/chicago/chicago_joined.csv` | `python -m data.fetch_chicago_weather` |
 
 **Seoul schema** — 14 columns common to all six files:

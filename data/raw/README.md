@@ -78,13 +78,14 @@ data/raw/
 ### Paris — `paris/`
 
 - **Source:** [opendata.paris.fr — Vélib' Métropole counter data](https://opendata.paris.fr/explore/dataset/comptage-velo-donnees-compteurs/) (annual ZIPs, 2022–2024) + Open-Meteo historical API
-- **Coverage:** 2022–2024 (26,297 hourly rows after MEAN-counter aggregation and weather join)
-- **Annual ZIPs** (gitignored) — large opendata.paris.fr downloads: `2023_comptage-velo-donnees-compteurs.csv` (~1.2 GB), `2024-comptage-velo-donnees-compteurs.csv` (~1.7 GB), `comptage-velo-donnees-compteurs.csv` (~390 MB rolling-window file). Patterns `[0-9]{4}*.csv` and `comptage*.csv` excluded by `.gitignore`.
+- **Coverage:** 2023–2024 (17,539 hourly rows after MEAN-counter aggregation, weather join, and the v4.3.0 Option B 2022 drop). The 2022 export CSV is still on disk and loaded by the fetch script, but its rows are filtered out at the post-concat stage — see Option B note below.
+- **Annual ZIPs** (gitignored) — large opendata.paris.fr downloads: `2023_comptage-velo-donnees-compteurs.csv` (~1.2 GB), `2024-comptage-velo-donnees-compteurs.csv` (~1.7 GB), `comptage-velo-donnees-compteurs.csv` (~390 MB rolling-window 2022 file). Patterns `[0-9]{4}*.csv` and `comptage*.csv` excluded by `.gitignore`.
 - **`paris_trips_hourly.csv`** — counter records aggregated to DATE + HOUR using MEAN across all stations (normalised counter scale)
 - **`paris_weather.csv`** — Open-Meteo archive (lat=48.8566, lng=2.3522, timezone=Europe/Paris)
 - **`paris_joined.csv`** — inner join of counter + weather on DATE + HOUR
 - Regenerate with: `python -m data.fetch_paris_weather`
-- **Note on scale:** Paris uses MEAN counter values, not raw station sums — RMSE of 23.30 bikes/hr is correct for this normalised scale (~50–500/hr range), not directly comparable to other cities' raw counts.
+- **Note on scale:** Paris uses MEAN counter values, not raw station sums — RMSE of 20.51 bikes/hr (post-v4.3.0; was 23.30 in v1.4.0 baseline) is correct for this normalised scale (~50–500/hr range), not directly comparable to other cities' raw counts.
+- **Option B 2022 drop (v4.3.0):** the 2022 export from opendata.paris.fr peaks 2h later than 2023+2024 in both AM and PM rush hours and is DST-consistent within 2022 — an intrinsic provider-side aggregation anomaly, not a timezone parser bug on our side. The fetch script (`data/fetch_paris_weather.py:135-149`) filters 2022 rows out at the post-concat stage as a data-quality gate. Reversible by removing that single block if upstream ever publishes a correction.
 
 ### Chicago — `chicago/`
 

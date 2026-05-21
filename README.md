@@ -58,7 +58,7 @@ It implements:
 | API Framework | FastAPI | Inference endpoint with auto-generated OpenAPI documentation |
 | Validation | Pydantic v2 | Strict request schema validation at the API boundary |
 | ASGI Server | uvicorn | Production-grade ASGI server for FastAPI |
-| Containerisation | Docker + Docker Compose | python:3.11-slim image; all 4 city models baked into image at build time |
+| Containerisation | Docker + Docker Compose | python:3.11-slim image; all 6 city models baked into image at build time |
 | Testing | pytest + httpx + anyio | Schema guard, RMSE gates (6 cities), routing guarantee, async API tests |
 | Linting / CI | ruff + GitHub Actions | Lint → test → docker build → RMSE accuracy gates (Job 7) on push to main |
 | Experiment Tracking | MLflow *(v4.0.0)* | GCS-backed run tracking, model registry, RMSE gate |
@@ -635,7 +635,7 @@ For NYC, the inverse logic applies — Citi Bike publishes a 17-year history int
 
 ### Phase 3 — Cloud Run Deployment ✅ Done (v2.0.0)
 
-- [x] Bake all 4 city model artifacts into Docker image at build time (no runtime volume mount)
+- [x] Bake all 6 city model artifacts into Docker image at build time (no runtime volume mount) — `Dockerfile:28-33` runs `python -m models.train` once per city during the image build
 - [x] `docker-compose.yml` — removed volume mount; image is self-contained
 - [x] GitHub Actions Job 4 — builds and pushes to GHCR using `GITHUB_TOKEN` (no manual secrets required)
 - [x] GitHub Actions Job 5 — builds and pushes to Artifact Registry (`us-central1-docker.pkg.dev/bike-demand-ml-system/bike-demand-repo/`) + redeploys Cloud Run on every merge to main; uses `GCP_SA_KEY` secret
@@ -670,7 +670,7 @@ Spec: [`docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`](docs/
 - [x] `models/train.py` — chronological 80/20 split (correctness fix); MAE metric added
 - [x] `.github/workflows/ci.yml` — Job 6: build + push `bike-demand-training` to GAR on merge to main
 - [x] GCP provisioned — Vertex AI API enabled; `vertex-sa` SA + IAM; `bike-demand-trigger` Cloud Run live; Cloud Scheduler (Sundays 02:00 UTC); Cloud Monitoring email alerts (log-based)
-- [x] Task 9 verification — manual Vertex AI job ran ~10 min; all 4 cities in Production registry; `gs://bike-demand-staging/mlflow/mlflow.db` uploaded; 47 model artifacts in GCS
+- [x] Task 9 verification — manual Vertex AI job ran ~10 min; 4 of 6 cities (Seoul / London / NYC / DC) in MLflow Production registry at v4.0.0 cut-off; `gs://bike-demand-staging/mlflow/mlflow.db` uploaded; 47 model artifacts in GCS. Paris and Chicago promotion is open candidate (b) in PROJECT-STATUS.md Next Step
 - [x] GitHub release v4.0.0 published (2026-05-17)
 
 ### Phase 7 — Automated Test Suite ✅ Done (2026-05-18)

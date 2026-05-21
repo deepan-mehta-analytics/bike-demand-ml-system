@@ -126,7 +126,7 @@ def train(city: str, data_path: str, n_estimators: int, random_state: int) -> di
 if __name__ == "__main__":
     args = _build_parser().parse_args()                                # parse CLI arguments (uses defaults if none given)
 
-    print(f"\nTraining RF model — city: {args.city}")                  # training header
+    print(f"\nTraining RF model -- city: {args.city}")                 # training header
     print(f"Data path : {args.data}")                                  # show input file being used
     print(f"Trees     : {args.n_estimators}  |  Seed: {args.random_state}\n")  # show hyperparameters
 

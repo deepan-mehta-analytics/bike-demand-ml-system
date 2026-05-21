@@ -489,8 +489,10 @@ See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL +
 |---|---|
 | Algorithm | Random Forest Regressor (`n_estimators=100`, `random_state=42`) |
 | RMSE | **470.76** |
-| MSE | 221,615.18 |
+| MAE | **246.02** |
+| MSE | 221,610.72 |
 | Train / Test split | Chronological 80/20 — oldest 80% → train, newest 20% → test |
+| Train / Test rows | 27,349 / 6,838 |
 | Data source | BigQuery `new_york_citibike.citibike_trips` (2014–2018) + Open-Meteo historical weather |
 | Rows | 34,187 hourly observations |
 
@@ -517,7 +519,10 @@ See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL +
 |---|---|
 | Algorithm | Random Forest Regressor (`n_estimators=100`, `random_state=42`) |
 | RMSE | **119.31** |
+| MAE | **67.75** |
+| MSE | 14,234.62 |
 | Train / Test split | Chronological 80/20 — oldest 80% → train, newest 20% → test |
+| Train / Test rows | 30,130 / 7,533 |
 | Data source | Capital Bikeshare CSVs (2014–2018) + Open-Meteo historical weather |
 | Rows | 37,663 hourly observations |
 

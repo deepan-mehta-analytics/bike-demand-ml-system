@@ -17,7 +17,7 @@ _CITY_CONFIGS = [
     ("data/processed/london_bike_sharing.csv", "london",  350),  # trained RMSE 228.58; threshold 350
     ("data/processed/nyc_bike_sharing.csv",    "nyc",     500),  # trained RMSE 345.69; threshold 500
     ("data/processed/dc_bike_sharing.csv",     "dc",      150),  # trained RMSE  97.47; threshold 150
-    ("data/processed/paris_bike_sharing.csv",  "paris",    50),  # trained RMSE  23.30; threshold  50 (normalised MEAN scale)
+    ("data/processed/paris_bike_sharing.csv",  "paris",    40),  # trained RMSE  20.51 (post-v4.3.0 tz fix + Option B drop 2022); threshold  40 (~95% headroom; normalised MEAN scale)
     ("data/processed/chicago_bike_sharing.csv","chicago",  350),  # trained RMSE 202.99; threshold 350
 ]
 

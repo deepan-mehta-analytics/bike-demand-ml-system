@@ -102,27 +102,25 @@ def aggregate_counter_data() -> pd.DataFrame:
                     f"Actual columns: {frame.columns.tolist()}"
                 )
 
-            # Normalise dates immediately per file to avoid mixed-format issues after concat.
+            # ── Normalise dates immediately per file to avoid mixed-format issues after concat ──
             # Annual files have three different formats across years:
-            #   2022: '2022-01-01T00:00:00'          (no timezone — naive)
+            #   2022: '2022-01-01T00:00:00'          (no timezone — naive, assumed Paris-local)
             #   2023: '2023-01-01T07:00:00+01:00'    (ISO with offset)
             #   2024: '2024-01-02 19:00:00.000 +0100' (space-separated, milliseconds)
-            # pandas 2.x drops naive datetimes to NaT when a mixed series is parsed with
-            # utc=True, so we localise timezone-naive rows to Europe/Paris first.
-            raw_dates  = pd.to_datetime(frame[DATE_COL], utc=True, errors="coerce")  # parse aware rows to UTC
-            naive_mask = raw_dates.isna() & frame[DATE_COL].notna()    # rows that failed = timezone-naive
-            if naive_mask.any():                                        # handle files without timezone (e.g. 2022)
-                naive_parsed = pd.to_datetime(                         # parse naive strings without tz
+            # Goal: all timestamps end naive Paris-local so the join with Open-Meteo weather
+            # (also Paris-local via timezone="Europe/Paris") aligns by wall-clock hour.
+            # Previous version converted to UTC, causing a 1-2 hour misalignment after join
+            # — see Seoul fix in commit 176e182 for the same pattern.
+            raw_dates   = pd.to_datetime(frame[DATE_COL], utc=True, errors="coerce")    # parse aware rows to UTC; naive rows → NaT
+            aware_paris = raw_dates.dt.tz_convert("Europe/Paris").dt.tz_localize(None)  # convert UTC → Paris → strip tz (naive Paris-local)
+            naive_mask  = raw_dates.isna() & frame[DATE_COL].notna()                    # rows that failed utc=True parse = timezone-naive
+            if naive_mask.any():                                                        # handle 2022 files (no tz marker — assumed Paris-local)
+                naive_paris = pd.to_datetime(                                           # parse naive strings without tz
                     frame.loc[naive_mask, DATE_COL], errors="coerce"
                 )
-                naive_utc = (                                          # localise to Paris then convert to UTC
-                    naive_parsed
-                    .dt.tz_localize("Europe/Paris", ambiguous="infer", nonexistent="shift_forward")
-                    .dt.tz_convert("UTC")
-                )
-                raw_dates = raw_dates.copy()                           # avoid SettingWithCopyWarning
-                raw_dates[naive_mask] = naive_utc                      # fill in the previously-NaT slots
-            frame[DATE_COL] = raw_dates                                # replace raw strings with UTC Timestamps
+                aware_paris = aware_paris.copy()                                        # avoid SettingWithCopyWarning
+                aware_paris.loc[naive_mask] = naive_paris.values                        # fill in the previously-NaT slots with naive Paris values
+            frame[DATE_COL] = aware_paris                                               # replace raw strings with naive Paris-local Timestamps
             n_valid = frame[DATE_COL].notna().sum()                    # count parseable rows for logging
             print(f"  Loaded {Path(path).name}: {len(frame):,} rows ({n_valid:,} with valid dates)")
             frames.append(frame)                                       # add normalised frame to list
@@ -134,6 +132,21 @@ def aggregate_counter_data() -> pd.DataFrame:
 
     df = df.dropna(subset=[DATE_COL])                                  # drop any remaining unparseable datetimes
     print(f"Rows with valid dates: {len(df):,}")
+
+    # ── Option B (v4.3.0): drop 2022 rows as a data-quality gate ─────────────
+    # The 2022 export from opendata.paris.fr peaks 2h later than 2023+2024 in
+    # both AM and PM rush hours, consistent across DST seasons (Jan vs Jul).
+    # This anomaly is intrinsic to the source export (likely an internal
+    # aggregation difference in the provider's pipeline) and is NOT a
+    # timezone parsing bug on our side — the parser above is correct for
+    # 2023+2024 ISO-with-offset rows. Verification evidence captured in
+    # project_paris_2022_anomaly.md.
+    # Filter is reversible: remove this block if a root cause is ever found
+    # and a per-row correction is established.
+    rows_before_2022_filter = len(df)                                  # capture row count for diagnostic log
+    df = df[df[DATE_COL].dt.year != 2022]                              # keep only 2023+2024 rows (Option B)
+    rows_dropped = rows_before_2022_filter - len(df)                   # count for visibility in stdout log
+    print(f"Option B filter: dropped {rows_dropped:,} rows from year 2022; kept {len(df):,} rows (2023+2024)")
 
     # Use all available data in the file (opendata.paris.fr is a rolling dataset)
     date_min = df[DATE_COL].min()                                      # earliest timestamp in source file

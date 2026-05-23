@@ -70,7 +70,7 @@ Both repos form a single portfolio system. Track them together here.
 
 ### Infrastructure (containerisation + CI)
 * `requirements.txt` — 12 packages pinned (FastAPI / uvicorn / scikit-learn / pandas / joblib / pydantic / pytest / httpx / ruff / anyio / requests / prometheus-fastapi-instrumentator); `pytest.ini` — `pythonpath = .`
-* 27 tests: 9 unit (features) + 5 API integration + 1 city default + 6 RMSE gates (`-m slow`) + 5 routing + 1 schema frozen-set guard
+* 32 tests: 10 unit (features incl. frozen-set guard) + 6 API integration (incl. city default) + 6 RMSE gates (`-m slow`) + 5 routing + 5 pipeline (Dataflow GBFS/TFL/ParseMessage/DirectRunner; auto-skipped in CI)
 * `Dockerfile` — `python:3.11-slim`, non-root `appuser`, stdlib health check; inline comments moved to standalone lines (Docker parse fix, commit `1ae284f`)
 * `docker-compose.yml` — fastapi service, port 8000, `USE_PUBSUB=false`; volume mount removed (artifacts baked into image)
 * `.github/workflows/ci.yml` — 7 jobs: `lint` (ruff), `test` (pytest fast — trains Seoul model as fixture), `docker` (image build), `publish` (push to GHCR), `publish-gar` (push to GAR + redeploy Cloud Run on merge to main), `build-training-container` (push Vertex AI training image to GAR), `accuracy` (RMSE gates across all 6 cities, push to main only); all jobs green on the latest push
@@ -177,13 +177,19 @@ Both repos form a single portfolio system. Track them together here.
 
 **Tracked follow-ups block now empty for the first time since pre-v4.2.0.** All 3 v4.2.0 carry-overs (Paris tz fix; `train.py` cp1252 stdout sweep; MAE rows in NYC/DC RF tables) shipped in v4.3.0.
 
-**Next priority (open).** No queued thread. Candidates:
+**Next priority — v4.4.0 in design (S1 complete 2026-05-23).** Spec [`docs/superpowers/specs/2026-05-23-drift-monitoring-design.md`](docs/superpowers/specs/2026-05-23-drift-monitoring-design.md) (commit `dac2990`) + plan [`docs/superpowers/plans/2026-05-23-drift-monitoring.md`](docs/superpowers/plans/2026-05-23-drift-monitoring.md) (commit `e8d26bb`) committed + pushed to `main`. v4.4.0 scope:
+- **Drift monitoring** — `monitoring/` package: weekly Open-Meteo refetch + PSI per weather feature vs same-season training baseline; GitHub Actions cron commits markdown report back to `main` with `[skip ci]`; zero paid GCP surface
+- **MLflow 6/6 promotion** — bundled pre-flight: `Dockerfile.training:38-41` 2-line edit copies Paris + Chicago CSVs; Vertex AI re-run promotes both to MLflow Production registry; closes "4 of 6 cities" Known Limitation
+
+Sprint cadence S1 → S2 (MLflow pre-flight) → S3 (drift module + 6 baselines, TDD) → S4 (GHA cron + manual smoke) → S5 (close-out + release) per [[session-shape-token-efficiency]].
+
+**Other open candidates (not bundled into v4.4.0, available for v4.5+):**
 - (a) Shiny Phase 8 / v1.7 — `shinytest2` browser harness (new R tooling, multi-session arc)
-- (b) Verify/trigger Paris + Chicago promotion in MLflow Production registry (only 4 of 6 cities registered at v4.0.0 cut-off)
-- (c) Shiny Priority 6 — upgrade Seoul **live station** feed from the 5-station `sample` key to a registered key
-- (d) Investigate the Paris 2022 anomaly root cause upstream (opendata.paris.fr) to potentially re-enable that 33% of data in a future v4.4+; reversible via single block in `data/fetch_paris_weather.py`
+- (b) Shiny Priority 6 — upgrade Seoul **live station** feed from the 5-station `sample` key to a registered key
+- (c) Investigate the Paris 2022 anomaly root cause upstream (opendata.paris.fr) to potentially re-enable that 33% of data; reversible via single block in `data/fetch_paris_weather.py`
+- (d) Concept drift on the Paris + London uniform-cadence subset — only cities with weekly trip-data publication; defer until v4.4.0 ships and v4.5+ scope is reviewed
 - (e) Any new ML / data-engineering thread
 
-*v4.3.0 Paris fix shipped 2026-05-21 — commits f713ae5 + 15312b4. v4.2.0 Seoul refresh shipped 2026-05-21 — commit 64ac1d2. Phase 7 complete 2026-05-18 — commit 8bcdb4c. v1.4.0 Paris + Chicago shipped 2026-05-18 — commit d8ee4e0. Phase 5 (Vertex AI + MLflow) complete — v4.0.0 shipped 2026-05-17.*
+*v4.4.0 design landed 2026-05-23 — commits dac2990 + e8d26bb. v4.3.0 Paris fix shipped 2026-05-21 — commits f713ae5 + 15312b4. v4.2.0 Seoul refresh shipped 2026-05-21 — commit 64ac1d2. Phase 7 complete 2026-05-18 — commit 8bcdb4c. v1.4.0 Paris + Chicago shipped 2026-05-18 — commit d8ee4e0. Phase 5 (Vertex AI + MLflow) complete — v4.0.0 shipped 2026-05-17.*
 
-Resume with: `"resume bike-demand-ml-system"`
+Resume with: `"resume bike-demand-ml-system v4.4.0 S2"`

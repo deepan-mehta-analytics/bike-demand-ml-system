@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v4.3.0 — Paris timezone fix + cross-city table alignment | ✅ Done | `15312b4` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v4.3.0 — Paris timezone fix + cross-city table alignment; v4.4.0 in design (S1 complete) | ✅ Done | `345ba5c` |
 | **bike_demand_prediction** | R Shiny dashboard | v1.5.0 shipped — testthat suite (36 tests / 62 assertions) + GitHub Actions CI | ✅ Done | `9da4a6d` |
 
 ### Trained City Models

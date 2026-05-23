@@ -39,7 +39,7 @@ Both repos form a single portfolio system. Track them together here.
 | ~~5.5~~ | bike-demand-ml-system | ~~Phase 13 — Seoul training data refresh (OA-15182 + Open-Meteo)~~ | ~~v4.2.0~~ | **✅ Shipped (2026-05-21)** |
 | ~~5.6~~ | bike-demand-ml-system | ~~Phase 14 — Paris timezone fix + Option B 2022 drop + cross-city table alignment~~ | ~~v4.3.0~~ | **✅ Shipped (2026-05-21)** |
 | ~~6~~ | bike-demand-ml-system | ~~4-city analogous timezone bug fix (Paris/Chicago/NYC/DC)~~ | ~~v4.3.0~~ | **✅ Scope shrunk to Paris-only after code inspection (NYC/DC/Chicago parse datetimes naively; no `tz_convert` calls); shipped as Paris-only in v4.3.0** |
-| **7** | bike_demand_prediction | Backlog — Seoul GBFS | — | External API key |
+| ~~7~~ | bike_demand_prediction | ~~Backlog — Seoul GBFS~~ | — | **✅ Integration shipped 2026-05-17 on Shiny side (commit `8682242`) on `sample` key; full-coverage upgrade demoted 2026-05-23 to runtime `.Renviron` config — see Shiny README "Optional — Seoul full-coverage upgrade". ML side never needed any key — OA-15182 training data is a public download.** |
 | **8** | bike_demand_prediction | Backlog — City expansion (SF/Amsterdam) | — | Data sourcing required |
 
 ---
@@ -185,7 +185,7 @@ Sprint cadence S1 → S2 (MLflow pre-flight) → S3 (drift module + 6 baselines,
 
 **Other open candidates (not bundled into v4.4.0, available for v4.5+):**
 - (a) Shiny Phase 8 / v1.7 — `shinytest2` browser harness (new R tooling, multi-session arc)
-- (b) Shiny Priority 6 — upgrade Seoul **live station** feed from the 5-station `sample` key to a registered key
+- ~~(b) Shiny Priority 6 — upgrade Seoul **live station** feed from the 5-station `sample` key to a registered key~~ — **Demoted 2026-05-23** to runtime `.Renviron` config on the Shiny side (integration already shipped in commit `8682242`); no longer an open candidate. Documented under Shiny README "Optional — Seoul full-coverage upgrade".
 - (c) Investigate the Paris 2022 anomaly root cause upstream (opendata.paris.fr) to potentially re-enable that 33% of data; reversible via single block in `data/fetch_paris_weather.py`
 - (d) Concept drift on the Paris + London uniform-cadence subset — only cities with weekly trip-data publication; defer until v4.4.0 ships and v4.5+ scope is reviewed
 - (e) Any new ML / data-engineering thread

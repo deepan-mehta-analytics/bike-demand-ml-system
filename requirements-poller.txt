@@ -1,0 +1,9 @@
+# Poller-only dependencies — install for the gbfs-poller Cloud Run service.
+# Deliberately separate from requirements.txt (inference image) and requirements-pipeline.txt
+# (Apache Beam Dataflow path) to keep the poller's container image slim (~150 MB).
+# Install with: pip install -r requirements-poller.txt
+fastapi==0.115.6                  # HTTP framework for POST /poll and GET /health endpoints
+uvicorn[standard]==0.34.0         # ASGI server with httptools/uvloop for production HTTP serving
+google-cloud-bigquery==3.27.0     # BigQuery client for load_table_from_json (free batch loads)
+requests==2.32.3                  # HTTP client for GBFS and TFL API calls (reused via gbfs_to_pubsub.py)
+pyyaml==6.0.2                     # YAML parser for reading config/gcp_config.yaml

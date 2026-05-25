@@ -9,7 +9,10 @@ Source files for each city's bike demand training pipeline. Files are preserved 
 ```
 data/raw/
 ├── seoul/
-│   └── seoul_bike_sharing.csv       ← UCI ML Repository dataset
+│   ├── YYYY-MM.csv                  ← OA-15182 per-trip monthly CSVs (cp949, ~640 MB each, gitignored)
+│   ├── seoul_trips_hourly.csv       ← hourly trip counts aggregated from the monthly CSVs
+│   ├── seoul_weather.csv            ← Open-Meteo historical weather for Seoul
+│   └── seoul_joined.csv             ← trips + weather joined on DATE + HOUR
 ├── london/
 │   └── london_merged.csv            ← Kaggle London Bike Sharing dataset
 ├── nyc/

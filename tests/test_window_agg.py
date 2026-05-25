@@ -1,6 +1,5 @@
 # ── Imports ───────────────────────────────────────────────────
 from datetime import datetime, timezone                       # UTC timestamps for window boundaries
-import pytest                                                  # testing framework
 
 from pipeline.window_agg import aggregate_window               # function under test
 

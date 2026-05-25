@@ -1,0 +1,34 @@
+# Base image: official slim Python 3.11 — matches CI python-version.
+FROM python:3.11-slim
+
+# Non-root user for safer runtime defaults.
+RUN useradd -m appuser
+
+# All subsequent COPY/RUN commands resolve relative to /app.
+WORKDIR /app
+
+# Copy the dep manifest first so the pip-install layer caches independently of source.
+COPY requirements-poller.txt .
+
+# Install the slim dep set without pip cache to keep the layer small.
+RUN pip install --no-cache-dir -r requirements-poller.txt
+
+# Copy only the directories the poller needs:
+#   pipeline/  — service code + reused gbfs_to_pubsub and new window_agg
+#   config/    — gcp_config.yaml read by _load_config at request time
+COPY --chown=appuser:appuser pipeline/ ./pipeline/
+COPY --chown=appuser:appuser config/   ./config/
+
+# Switch to non-root user before exposing the port.
+USER appuser
+
+# Document the port uvicorn binds to inside the container.
+EXPOSE 8080
+
+# Liveness probe — polls /health every 30s; marks unhealthy after 3 failures.
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"
+
+# Bind on all interfaces so Cloud Run can reach the port from the host.
+# Cloud Run sets $PORT to 8080 by default; passing --port=8080 hardcodes the same value.
+CMD ["uvicorn", "pipeline.gbfs_poller_service:app", "--host", "0.0.0.0", "--port", "8080"]

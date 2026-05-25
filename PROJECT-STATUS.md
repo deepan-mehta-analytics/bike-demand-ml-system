@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v1.6.0 Sprint 1 shipped — Cloud Run GBFS poller (`gbfs-poller` + `gbfs-poller-cron` + BQ 7-day partitions); GCP Stream tab live. v4.3.0 was Paris tz fix; v4.4.0 drift monitoring in design (S1 complete) | ✅ Done | `9f86cb3` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v3.1.0 shipped — Cloud Run GBFS poller (`gbfs-poller` + `gbfs-poller-cron` + BQ 7-day partitions) replacing the v3.0.0 Dataflow path; GCP Stream tab live. (Joint cross-repo work tracked as Shiny v1.6.0 Sprint 1.) v4.3.0 was Paris tz fix; v4.4.0 drift monitoring in design (S1 complete) | ✅ Done | `9f86cb3` |
 | **bike_demand_prediction** | R Shiny dashboard | v1.5.0 shipped — testthat suite + CI; v1.6.0 spec written (dashboard truth audit, 3 workstreams A/B/C); Sprint 1 Workstream A now live | ✅ Done | `9d5c70e` |
 
 ### Trained City Models
@@ -40,7 +40,7 @@ Both repos form a single portfolio system. Track them together here.
 | ~~5.6~~ | bike-demand-ml-system | ~~Phase 14 — Paris timezone fix + Option B 2022 drop + cross-city table alignment~~ | ~~v4.3.0~~ | **✅ Shipped (2026-05-21)** |
 | ~~6~~ | bike-demand-ml-system | ~~4-city analogous timezone bug fix (Paris/Chicago/NYC/DC)~~ | ~~v4.3.0~~ | **✅ Scope shrunk to Paris-only after code inspection (NYC/DC/Chicago parse datetimes naively; no `tz_convert` calls); shipped as Paris-only in v4.3.0** |
 | ~~7~~ | bike_demand_prediction | ~~Backlog — Seoul GBFS~~ | — | **✅ Integration shipped 2026-05-17 on Shiny side (commit `8682242`) on `sample` key; full-coverage upgrade demoted 2026-05-23 to runtime `.Renviron` config — see Shiny README "Optional — Seoul full-coverage upgrade". ML side never needed any key — OA-15182 training data is a public download.** |
-| ~~8.0~~ | bike-demand-ml-system + bike_demand_prediction | ~~v1.6.0 Sprint 1 — Cloud Run GBFS poller replacing paused Dataflow path~~ | ~~v1.6.0~~ | **✅ Shipped 2026-05-25 — `gbfs-poller` Cloud Run + `gbfs-poller-cron` Scheduler (every 5 min) + BQ 7-day partitioned `station_snapshots`. 6,032 rows/window across 4 cities. GCP Stream tab now actually streams. ML commits `6d6e5a2`→`9f86cb3`.** |
+| ~~8.0~~ | bike-demand-ml-system + bike_demand_prediction | ~~Sprint 1 — Cloud Run GBFS poller replacing paused Dataflow path~~ | ~~v3.1.0 (ML) / v1.6.0 Sprint 1 (Shiny)~~ | **✅ Shipped 2026-05-25 — `gbfs-poller` Cloud Run + `gbfs-poller-cron` Scheduler (every 5 min) + BQ 7-day partitioned `station_snapshots`. 6,032 rows/window across 4 cities. GCP Stream tab now actually streams. ML commits `6d6e5a2`→`9f86cb3`; ML release v3.1.0; Shiny tracks the same work as Sprint 1 of its v1.6.0 dashboard-truth-and-freshness ship.** |
 | **8** | bike_demand_prediction | Backlog — City expansion (SF/Amsterdam) | — | Data sourcing required |
 
 ---
@@ -71,7 +71,7 @@ Both repos form a single portfolio system. Track them together here.
 
 ### Infrastructure (containerisation + CI)
 * `requirements.txt` — 12 packages pinned (FastAPI / uvicorn / scikit-learn / pandas / joblib / pydantic / pytest / httpx / ruff / anyio / requests / prometheus-fastapi-instrumentator); `pytest.ini` — `pythonpath = .`
-* 40 tests: 10 unit (features incl. frozen-set guard) + 6 API integration (incl. city default) + 6 RMSE gates (`-m slow`) + 5 routing + 5 Dataflow pipeline (GBFS/TFL/ParseMessage/DirectRunner; auto-skipped in CI) + 5 v1.6.0 window_agg (5-min aggregator) + 3 v1.6.0 gbfs_poller_service (FastAPI contract)
+* 40 tests: 10 unit (features incl. frozen-set guard) + 6 API integration (incl. city default) + 6 RMSE gates (`-m slow`) + 5 routing + 5 Dataflow pipeline (GBFS/TFL/ParseMessage/DirectRunner; auto-skipped in CI) + 5 v3.1.0 window_agg (5-min aggregator) + 3 v3.1.0 gbfs_poller_service (FastAPI contract)
 * `Dockerfile` — `python:3.11-slim`, non-root `appuser`, stdlib health check; inline comments moved to standalone lines (Docker parse fix, commit `1ae284f`)
 * `docker-compose.yml` — fastapi service, port 8000, `USE_PUBSUB=false`; volume mount removed (artifacts baked into image)
 * `.github/workflows/ci.yml` — 7 jobs: `lint` (ruff), `test` (pytest fast — trains Seoul model as fixture), `docker` (image build), `publish` (push to GHCR), `publish-gar` (push to GAR + redeploy Cloud Run on merge to main), `build-training-container` (push Vertex AI training image to GAR), `accuracy` (RMSE gates across all 6 cities, push to main only); all jobs green on the latest push
@@ -85,7 +85,7 @@ Both repos form a single portfolio system. Track them together here.
 * Paris RMSE (20.51 post-v4.3.0; was 23.30 in v1.4.0 baseline) reflects counter MEAN normalisation (~50–500/hr scale), not raw station volume — correct behaviour. 2022 source export dropped as a data-quality gate (peaked 2h later than 2023+2024 in both AM and PM rush across DST seasons; intrinsic to provider's aggregation pipeline; reversible)
 * NYC RMSE (470.76) is higher due to larger absolute trip volumes; adding weather data beyond
   temperature/humidity (e.g. actual visibility, not Open-Meteo zeros) would likely reduce it
-* ~~Dataflow streaming pipeline has **no always-free tier** (~$0.05/hr on e2-medium) — run only for demos; cancel after verification~~ — **Superseded 2026-05-25 by v1.6.0 Sprint 1.** Cloud Run (`gbfs-poller`) + Cloud Scheduler (`gbfs-poller-cron`, every 5 min) replaced Dataflow as the GBFS → BQ streaming path at zero always-free-tier cost. `pipeline/dataflow_job.py` retained intact for potential resurrection.
+* ~~Dataflow streaming pipeline has **no always-free tier** (~$0.05/hr on e2-medium) — run only for demos; cancel after verification~~ — **Superseded 2026-05-25 by v3.1.0.** Cloud Run (`gbfs-poller`) + Cloud Scheduler (`gbfs-poller-cron`, every 5 min) replaced Dataflow as the GBFS → BQ streaming path at zero always-free-tier cost. `pipeline/dataflow_job.py` retained intact for potential resurrection.
 
 ---
 
@@ -191,9 +191,9 @@ Sprint cadence S1 → S2 (MLflow pre-flight) → S3 (drift module + 6 baselines,
 - (d) Concept drift on the Paris + London uniform-cadence subset — only cities with weekly trip-data publication; defer until v4.4.0 ships and v4.5+ scope is reviewed
 - (e) Any new ML / data-engineering thread
 
-**v1.6.0 Sprint 1 shipped 2026-05-25 — Cloud Run GBFS poller live.** Requirements (`6d6e5a2`) → `window_agg.py` TDD (`a83e0a6`) → `gbfs_poller_service.py` TDD (`fbb5ef5`) → `Dockerfile.poller` + smoke test (`9f86cb3`) → SA + IAM + GAR push + Cloud Run deploy + Scheduler + BQ 7-day partition. 6,032 rows/window across nyc/dc/london/chicago confirmed in BQ. GCP Stream tab live within 10 min of scheduler start. Cross-repo sync in this commit.
+**v3.1.0 shipped 2026-05-25 — Cloud Run GBFS poller live.** Requirements (`6d6e5a2`) → `window_agg.py` TDD (`a83e0a6`) → `gbfs_poller_service.py` TDD (`fbb5ef5`) → `Dockerfile.poller` + smoke test (`9f86cb3`) → SA + IAM + GAR push + Cloud Run deploy + Scheduler + BQ 7-day partition. 6,032 rows/window across nyc/dc/london/chicago confirmed in BQ. GCP Stream tab live within 10 min of scheduler start. ML release tag `v3.1.0`; Shiny tracks the same work as Sprint 1 of its v1.6.0 dashboard-truth-and-freshness ship.
 
-**v1.6.0 Sprint 2 (Shiny Workstream B — forecast freshness + honest demo) is next.** Requires a separate brainstorming → writing-plans → executing-plans cycle in the Shiny repo.
+**v1.6.0 Sprint 2 (Shiny Workstream B — forecast freshness + honest demo) is next on the Shiny side.** Requires a separate brainstorming → writing-plans → executing-plans cycle in the Shiny repo; no ML-repo code changes expected.
 
 *v4.4.0 design landed 2026-05-23 — commits dac2990 + e8d26bb. v4.3.0 Paris fix shipped 2026-05-21 — commits f713ae5 + 15312b4. v4.2.0 Seoul refresh shipped 2026-05-21 — commit 64ac1d2. Phase 7 complete 2026-05-18 — commit 8bcdb4c. v1.4.0 Paris + Chicago shipped 2026-05-18 — commit d8ee4e0. Phase 5 (Vertex AI + MLflow) complete — v4.0.0 shipped 2026-05-17.*
 

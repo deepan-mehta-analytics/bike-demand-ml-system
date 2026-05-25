@@ -3,7 +3,7 @@
 ## ⚡ Quick Summary
 This project is the **Python ML backend** in a two-repo portfolio system. It forecasts hourly bike-rental demand from weather and temporal signals, exposes the model through a FastAPI inference API, and is consumed by the companion [R Shiny dashboard](https://github.com/deepan-mehta-analytics/bike-demand-prediction) via `httr::POST /predict`. The architecture separates training from inference cleanly, persists model artifacts for reproducible deployment, and is containerised for local and cloud deployment.
 
-**v4.3.0 + v1.6.0 are live.** A `bike-demand-trigger` Cloud Run service submits a 6-combo hyperparameter sweep to Vertex AI every Sunday, with SQLite+GCS-backed MLflow experiment tracking and a 3% RMSE gate before promoting models to Production — all 6 city models verified. The training data is refreshed iteratively: Seoul moved to a 3-year OA-15182 + Open-Meteo build in v4.2.0 (RMSE 1,503.52, 26,303 hourly rows), and Paris was re-aligned to wall-clock-local time in v4.3.0 (RMSE 20.51, mirroring the Seoul tz-fix precedent in commit `176e182`, with a 2022-anomaly drop applied as a data-quality gate). A 40-test pytest suite enforces RMSE gates, schema consistency, per-city routing, Dataflow pipeline contracts, and the v1.6.0 poller's 5-minute window aggregator across all 6 cities on every push to main. The FastAPI inference API runs on GCP Cloud Run at `https://bike-demand-api-246440913351.us-central1.run.app` with structured JSON logging and a Prometheus `/metrics` endpoint. **v1.6.0 Sprint 1 (2026-05-25)** replaced the paid Dataflow streaming path with a Cloud Run `gbfs-poller` service driven by Cloud Scheduler every 5 minutes, writing to a BigQuery 7-day partitioned `station_snapshots` table at zero always-free-tier cost (6,032 rows/window across NYC / DC / London / Chicago verified). The original Apache Beam Dataflow job (`pipeline/dataflow_job.py`) is retained intact for potential resurrection.
+**v4.3.0 + v3.1.0 are live.** A `bike-demand-trigger` Cloud Run service submits a 6-combo hyperparameter sweep to Vertex AI every Sunday, with SQLite+GCS-backed MLflow experiment tracking and a 3% RMSE gate before promoting models to Production — all 6 city models verified. The training data is refreshed iteratively: Seoul moved to a 3-year OA-15182 + Open-Meteo build in v4.2.0 (RMSE 1,503.52, 26,303 hourly rows), and Paris was re-aligned to wall-clock-local time in v4.3.0 (RMSE 20.51, mirroring the Seoul tz-fix precedent in commit `176e182`, with a 2022-anomaly drop applied as a data-quality gate). A 40-test pytest suite enforces RMSE gates, schema consistency, per-city routing, Dataflow pipeline contracts, and the v3.1.0 poller's 5-minute window aggregator across all 6 cities on every push to main. The FastAPI inference API runs on GCP Cloud Run at `https://bike-demand-api-246440913351.us-central1.run.app` with structured JSON logging and a Prometheus `/metrics` endpoint. **v3.1.0 Sprint 1 (2026-05-25)** replaced the paid Dataflow streaming path with a Cloud Run `gbfs-poller` service driven by Cloud Scheduler every 5 minutes, writing to a BigQuery 7-day partitioned `station_snapshots` table at zero always-free-tier cost (6,032 rows/window across NYC / DC / London / Chicago verified). The original Apache Beam Dataflow job (`pipeline/dataflow_job.py`) is retained intact for potential resurrection.
 
 It is engineered as the next stage in a data analytics → data engineering → ML engineering trajectory: a model that ships to an API, not a notebook that ships to a screenshot.
 
@@ -25,7 +25,7 @@ It is engineered as the next stage in a data analytics → data engineering → 
 [![Status](https://img.shields.io/badge/v4.1.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
 [![Status](https://img.shields.io/badge/v4.2.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/releases/tag/v4.2.0)
 [![Status](https://img.shields.io/badge/v4.3.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/releases/tag/v4.3.0)
-[![Status](https://img.shields.io/badge/v1.6.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
+[![Status](https://img.shields.io/badge/v3.1.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
 [![Cloud Run](https://img.shields.io/badge/Cloud_Run-Live-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://bike-demand-api-246440913351.us-central1.run.app)
 [![GBFS Poller](https://img.shields.io/badge/GBFS_Poller-Cloud_Run-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
 [![Prometheus](https://img.shields.io/badge/Prometheus-metrics-orange?style=for-the-badge&logo=prometheus&logoColor=white)](https://bike-demand-api-246440913351.us-central1.run.app/metrics)
@@ -105,11 +105,11 @@ bike-demand-ml-system/
 ├── PROJECT-STATUS.md
 ├── requirements.txt                    ← pinned Python dependencies (inference API + tests)
 ├── requirements-pipeline.txt           ← Dataflow pipeline-only deps (apache-beam, pubsub, pyyaml) — not in Docker image
-├── requirements-poller.txt             ← v1.6.0 GBFS poller deps (fastapi, uvicorn, google-cloud-bigquery, httpx)
+├── requirements-poller.txt             ← v3.1.0 GBFS poller deps (fastapi, uvicorn, google-cloud-bigquery, httpx)
 ├── requirements-vertex.txt             ← training container deps (google-cloud-aiplatform, mlflow, pandas<3)
 ├── Dockerfile                          ← inference API image: python:3.11-slim, non-root user, health check
 ├── Dockerfile.training                 ← training + trigger container; bakes 4 city CSVs (paris + chicago join in v4.4.0 S2); CMD runs retrain_job.py
-├── Dockerfile.poller                   ← v1.6.0 slim image for `gbfs-poller` Cloud Run service (FastAPI + BigQuery client)
+├── Dockerfile.poller                   ← v3.1.0 slim image for `gbfs-poller` Cloud Run service (FastAPI + BigQuery client)
 ├── docker-compose.yml                  ← local dev orchestration; models baked into image
 ├── .dockerignore                       ← excludes venv/, .git/, *.pkl from build context
 ├── .gitignore
@@ -160,18 +160,18 @@ bike-demand-ml-system/
 │   ├── test_model_accuracy.py          ← RMSE gate tests: per-city accuracy assertions (slow, CI Job 7)
 │   ├── test_routing.py                 ← routing tests: no-fallback guarantee for Paris/Chicago/NYC/DC
 │   ├── test_pipeline.py                ← Dataflow pipeline tests: DoFn unit + DirectRunner end-to-end (needs requirements-pipeline.txt)
-│   ├── test_window_agg.py              ← v1.6.0 poller: 5-min window aggregator unit tests (avg/min/max, multi-city, rounding)
-│   └── test_gbfs_poller_service.py     ← v1.6.0 poller: FastAPI service contract tests
+│   ├── test_window_agg.py              ← v3.1.0 poller: 5-min window aggregator unit tests (avg/min/max, multi-city, rounding)
+│   └── test_gbfs_poller_service.py     ← v3.1.0 poller: FastAPI service contract tests
 │
 ├── config/
 │   └── gcp_config.yaml                 ← GCP project, Pub/Sub topic, BigQuery, Dataflow, GBFS city URLs
 │
 ├── pipeline/
 │   ├── __init__.py                     ← marks pipeline/ as a Python package
-│   ├── gbfs_to_pubsub.py               ← legacy: GBFS station poller → Pub/Sub topic (v3.0.0 Dataflow path; superseded by gbfs_poller_service.py in v1.6.0)
+│   ├── gbfs_to_pubsub.py               ← legacy: GBFS station poller → Pub/Sub topic (v3.0.0 Dataflow path; superseded by gbfs_poller_service.py in v3.1.0)
 │   ├── dataflow_job.py                 ← legacy: Apache Beam Pub/Sub → 5-min FixedWindows → BigQuery (retained intact)
-│   ├── gbfs_poller_service.py          ← v1.6.0 Cloud Run service: poll GBFS feeds → 5-min window agg → BigQuery direct insert (zero-cost replacement for Dataflow path)
-│   ├── window_agg.py                   ← v1.6.0 pure-Python helper: group GBFS snapshots by (city, station) → avg/min/max bike counts per window
+│   ├── gbfs_poller_service.py          ← v3.1.0 Cloud Run service: poll GBFS feeds → 5-min window agg → BigQuery direct insert (zero-cost replacement for Dataflow path)
+│   ├── window_agg.py                   ← v3.1.0 pure-Python helper: group GBFS snapshots by (city, station) → avg/min/max bike counts per window
 │   ├── retrain_job.py                  ← Vertex AI entry point: 6-combo sweep → MLflow → RMSE gate → Model Registry
 │   └── vertex_trigger.py               ← Cloud Run HTTP handler: POST /trigger → submit CustomJob async
 │
@@ -329,9 +329,9 @@ Cloud Run returns a service URL on first deploy. Use that URL as `FASTAPI_URL` i
 
 ---
 
-### 📡 Option 5 — Pub/Sub + Dataflow Streaming Pipeline (v3.0.0 — superseded by v1.6.0 Cloud Run poller)
+### 📡 Option 5 — Pub/Sub + Dataflow Streaming Pipeline (v3.0.0 — superseded by v3.1.0 Cloud Run poller)
 
-> **As of v1.6.0 (2026-05-25), the production streaming path is the Cloud Run `gbfs-poller` service driven by Cloud Scheduler every 5 minutes.** It writes directly to a BigQuery 7-day-partitioned `station_snapshots` table at zero always-free-tier cost. See `pipeline/gbfs_poller_service.py` + `Dockerfile.poller`. The Dataflow path below is retained for reference and remains runnable, but you should not need to launch it for the dashboard to receive live data.
+> **As of v3.1.0 (2026-05-25), the production streaming path is the Cloud Run `gbfs-poller` service driven by Cloud Scheduler every 5 minutes.** It writes directly to a BigQuery 7-day-partitioned `station_snapshots` table at zero always-free-tier cost. See `pipeline/gbfs_poller_service.py` + `Dockerfile.poller`. The Dataflow path below is retained for reference and remains runnable, but you should not need to launch it for the dashboard to receive live data.
 
 The legacy streaming pipeline polls live GBFS bike-station feeds, publishes to Cloud Pub/Sub, and runs an Apache Beam job that aggregates 5-minute windows into BigQuery.
 
@@ -421,8 +421,8 @@ The suite has seven modules (40 tests) across three tiers:
 | `tests/test_routing.py` | Unit | No-fallback guarantee: Paris/Chicago/NYC/DC route to their own artifacts; unknown city falls back to Seoul |
 | `tests/test_model_accuracy.py` | Accuracy | Per-city RMSE gates (6 cities): trains a fresh RF from the committed CSV, asserts RMSE < threshold. Marked `@pytest.mark.slow` — runs only in CI Job 7 |
 | `tests/test_pipeline.py` | Unit + Pipeline | Legacy Dataflow path: GBFS/TFL snapshot schema, ParseMessage DoFn, DirectRunner end-to-end; auto-skipped unless `requirements-pipeline.txt` is installed |
-| `tests/test_window_agg.py` | Unit | v1.6.0 poller: 5-minute window aggregator — empty input, single snapshot degenerate stats, multi-snapshot avg/min/max, multi-city/station keying, 2-decimal rounding parity with the Dataflow path |
-| `tests/test_gbfs_poller_service.py` | Unit | v1.6.0 poller: FastAPI service contract — health endpoint, poller trigger response shape |
+| `tests/test_window_agg.py` | Unit | v3.1.0 poller: 5-minute window aggregator — empty input, single snapshot degenerate stats, multi-snapshot avg/min/max, multi-city/station keying, 2-decimal rounding parity with the Dataflow path |
+| `tests/test_gbfs_poller_service.py` | Unit | v3.1.0 poller: FastAPI service contract — health endpoint, poller trigger response shape |
 
 ```bash
 # Fast suite (schema, API, routing — excludes RMSE gates)
@@ -598,7 +598,7 @@ The ~16× spread between summer rush and middle-of-night confirms the model capt
 - **No automated drift monitoring on inference inputs yet** — feature importances are logged to MLflow on every Vertex AI retrain, but there is no scheduled job that compares live weather distributions against the training baseline. Tracked in v4.4.0 design spec [`docs/superpowers/specs/2026-05-23-drift-monitoring-design.md`](docs/superpowers/specs/2026-05-23-drift-monitoring-design.md).
 - No request authentication or rate-limiting on the API
 - ~~No structured logging or observability hooks~~ — structured JSON → Cloud Logging + Prometheus `/metrics` shipped in v2.1.0 ✅
-- ~~Dataflow streaming pipeline has no always-free tier (~$0.05/hr on e2-medium) — run only for demos~~ — **Superseded 2026-05-25 by v1.6.0:** Cloud Run `gbfs-poller` + Cloud Scheduler (every 5 min) + BigQuery 7-day partitioned `station_snapshots` table replaces the Dataflow path at zero always-free-tier cost ✅
+- ~~Dataflow streaming pipeline has no always-free tier (~$0.05/hr on e2-medium) — run only for demos~~ — **Superseded 2026-05-25 by v3.1.0:** Cloud Run `gbfs-poller` + Cloud Scheduler (every 5 min) + BigQuery 7-day partitioned `station_snapshots` table replaces the Dataflow path at zero always-free-tier cost ✅
 
 These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 
@@ -687,7 +687,7 @@ Spec: [`docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`](docs/
 - [x] Task 9 verification — manual Vertex AI job ran ~10 min; 4 of 6 cities (Seoul / London / NYC / DC) in MLflow Production registry at v4.0.0 cut-off; `gs://bike-demand-staging/mlflow/mlflow.db` uploaded; 47 model artifacts in GCS. Paris and Chicago promotion is open candidate (b) in PROJECT-STATUS.md Next Step
 - [x] GitHub release v4.0.0 published (2026-05-17)
 
-### Phase 8 — Cloud Run GBFS Poller ✅ Done (v1.6.0 — 2026-05-25)
+### Phase 8 — Cloud Run GBFS Poller ✅ Done (v3.1.0 — 2026-05-25)
 
 Replaces the paused Dataflow streaming path with a zero-always-free-tier Cloud Run service. Driven by Cloud Scheduler every 5 minutes; writes to a BigQuery 7-day partitioned `station_snapshots` table; consumed by the companion R Shiny dashboard's GCP Stream tab.
 

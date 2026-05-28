@@ -8,3 +8,7 @@ __pycache__/
 .claude/
 models/*.pkl
 data/chroma_db/
+mlruns/
+data/
+mlartifacts/
+*.ipynb

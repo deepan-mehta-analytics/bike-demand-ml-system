@@ -56,9 +56,15 @@ app = FastAPI(                                                 # FastAPI applica
 )
 
 # ── Window math constants ─────────────────────────────────────
+# POLL_ITERATIONS was 5 (4×60s in-request sleeps) but Cloud Run bills the full
+# ~248s/run on 1 vCPU (~$46/mo, far over free tier). Reduced to 1: the dashboard's
+# min/max ribbon is driven by cross-station spread (MIN/MAX across stations in the
+# Shiny query), not intra-window time samples, so a single snapshot per station is
+# visually identical and keeps the service in the always-free tier. Kept as a
+# tunable in case richer intra-window sampling is wanted later.
 WINDOW_SECONDS    = 300                                        # 5-minute window per spec § 4.4
-POLL_ITERATIONS   = 5                                          # poll 5 times per window to compute meaningful min/max
-POLL_INTERVAL_SEC = 60                                         # 60s between poll iterations (5 × 60 = 300s window)
+POLL_ITERATIONS   = 1                                          # single snapshot per 5-min window (see note above)
+POLL_INTERVAL_SEC = 60                                         # inter-iteration gap; unused while POLL_ITERATIONS=1 (no sleep fires)
 
 # ── BQ table reference ────────────────────────────────────────
 BQ_TABLE = "bike-demand-ml-system.bike_demand.station_snapshots"  # fully qualified table for load_table_from_json
@@ -95,10 +101,10 @@ def health():
 def poll():
     """Triggered by Cloud Scheduler every 5 min via OIDC-authenticated POST.
 
-    Polls all configured GBFS cities 5 times (60s apart), aggregates into a
-    single 5-min window per (city, station), and writes the result to BigQuery
-    via a free batch load job. DRY_RUN=true skips the BQ write and returns
-    the row count + sample for local/integration testing.
+    Polls all configured GBFS cities once per window (POLL_ITERATIONS),
+    aggregates into a single 5-min window per (city, station), and writes the
+    result to BigQuery via a free batch load job. DRY_RUN=true skips the BQ
+    write and returns the row count + sample for local/integration testing.
     """
     cfg          = _load_config()                              # GBFS endpoints + cities loaded at request time
     dry_run      = os.getenv("DRY_RUN", "false").lower() == "true"  # toggle for local tests + first-deploy verification

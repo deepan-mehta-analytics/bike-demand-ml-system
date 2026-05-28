@@ -85,7 +85,7 @@ Both repos form a single portfolio system. Track them together here.
 * Paris RMSE (20.51 post-v4.3.0; was 23.30 in v1.4.0 baseline) reflects counter MEAN normalisation (~50–500/hr scale), not raw station volume — correct behaviour. 2022 source export dropped as a data-quality gate (peaked 2h later than 2023+2024 in both AM and PM rush across DST seasons; intrinsic to provider's aggregation pipeline; reversible)
 * NYC RMSE (470.76) is higher due to larger absolute trip volumes; adding weather data beyond
   temperature/humidity (e.g. actual visibility, not Open-Meteo zeros) would likely reduce it
-* ~~Dataflow streaming pipeline has **no always-free tier** (~$0.05/hr on e2-medium) — run only for demos; cancel after verification~~ — **Superseded 2026-05-25 by v3.1.0.** Cloud Run (`gbfs-poller`) + Cloud Scheduler (`gbfs-poller-cron`, every 5 min) replaced Dataflow as the GBFS → BQ streaming path at zero always-free-tier cost. `pipeline/dataflow_job.py` retained intact for potential resurrection.
+* ~~Dataflow streaming pipeline has **no always-free tier** (~$0.05/hr on e2-medium) — run only for demos; cancel after verification~~ — **Superseded 2026-05-25 by v3.1.0.** Cloud Run (`gbfs-poller`) + Cloud Scheduler (`gbfs-poller-cron`, every 5 min) replaced Dataflow as the GBFS → BQ streaming path at zero always-free-tier cost. `pipeline/dataflow_job.py` retained intact for potential resurrection. **Cost fix 2026-05-28:** poller reduced from 5 polls/window (4×60s in-request sleeps, ~248s/run billed = ~$46/mo) to a single snapshot per window (`POLL_ITERATIONS=1`, ~4s/run) — back inside the free tier; dashboard ribbon unaffected (cross-station spread, not intra-window samples).
 
 ---
 

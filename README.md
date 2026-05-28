@@ -700,6 +700,7 @@ Replaces the paused Dataflow streaming path with a zero-always-free-tier Cloud R
 - [x] GCP provisioned — `gbfs-poller` Cloud Run service deployed to `us-central1`; `gbfs-poller-cron` Cloud Scheduler job (every 5 min); BigQuery `station_snapshots` table re-partitioned with a 7-day expiry; service account + IAM bindings
 - [x] End-to-end verified — 6,032 rows / 5-minute window across NYC / DC / London / Chicago; GCP Stream tab in the companion R Shiny dashboard now streams within ~10 min of scheduler start
 - [x] CI hotfix `7d43a81` — removed unused `import pytest` in `tests/test_window_agg.py` that gated Ruff lint for 4 commits running
+- [x] Cost optimization (2026-05-28) — `/poll` now takes a **single snapshot per 5-minute window** (`POLL_ITERATIONS=1`), down from 5 polls with 4×60s in-request sleeps. Cloud Run billed the full ~248s/run on 1 vCPU (~$46/mo, over the always-free tier); each run is now ~4s. The dashboard's min/max ribbon is driven by cross-station spread (the Shiny query takes `MIN`/`MAX` across stations), not intra-window time samples, so a single snapshot per station is visually identical. `window_agg` is unchanged — it already returns degenerate avg=min=max stats for a one-sample window.
 
 ### Phase 7 — Automated Test Suite ✅ Done (2026-05-18)
 

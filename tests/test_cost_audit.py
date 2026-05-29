@@ -166,3 +166,148 @@ def test_post_to_slack_returns_false_on_network_error():                # no fix
     with patch("notify.requests.post", side_effect=req.ConnectionError("timeout")):
         result = post_to_slack("test message", "https://hooks.slack.com/fake")
     assert result is False                                              # network error → False, never an exception
+
+
+# ── checks.py tests ────────────────────────────────────────────────────────────
+from unittest.mock import patch, MagicMock                              # standard mocking — already imported above; re-import is fine
+from checks import (                                                    # all seven check functions under test
+    check_artifact_registry,
+    check_compute,
+    check_vertex,
+    check_bigquery,
+    check_spend_mtd,
+    check_gcs,
+    check_cloud_run,
+)
+
+
+def test_check_artifact_registry_groups_by_package_and_sums_gb():
+    """check_artifact_registry groups images by package name and sums total GB."""
+    fake_img_a = MagicMock()                                           # first image — bike-demand-api package
+    fake_img_a.name = "projects/p/locations/us-central1/repositories/r/dockerImages/bike-demand-api@sha256:aaa"
+    fake_img_a.image_size_bytes = 500_000_000                          # 0.5 GB
+
+    fake_img_b = MagicMock()                                           # second image — same package, different digest
+    fake_img_b.name = "projects/p/locations/us-central1/repositories/r/dockerImages/bike-demand-api@sha256:bbb"
+    fake_img_b.image_size_bytes = 300_000_000                          # 0.3 GB
+
+    with patch("checks.artifactregistry_v1.ArtifactRegistryClient") as MockClient:
+        MockClient.return_value.list_docker_images.return_value = [fake_img_a, fake_img_b]
+        result = check_artifact_registry("proj", "us-central1", "bike-demand-repo")
+
+    assert result["pkg_versions"]["bike-demand-api"] == 2              # two images = two versions of the same package
+    assert abs(result["total_gb"] - 0.8) < 0.001                      # 0.5 + 0.3 GB
+
+
+def test_check_compute_returns_running_vm_names():
+    """check_compute returns names of VMs in RUNNING state; ignores TERMINATED."""
+    fake_running = MagicMock()                                         # a VM that is actively running
+    fake_running.name = "stray-vm"
+    fake_running.status = "RUNNING"
+
+    fake_stopped = MagicMock()                                         # a VM that is stopped — should NOT appear in results
+    fake_stopped.name = "stopped-vm"
+    fake_stopped.status = "TERMINATED"
+
+    fake_zone_group = MagicMock()                                      # aggregated list zone group
+    fake_zone_group.instances = [fake_running, fake_stopped]           # both VMs in the same zone
+
+    with patch("checks.compute_v1.InstancesClient") as MockClient:
+        MockClient.return_value.aggregated_list.return_value = [("zones/us-central1-a", fake_zone_group)]
+        result = check_compute("proj")
+
+    assert "stray-vm" in result["running_vms"]                         # running VM must appear
+    assert "stopped-vm" not in result["running_vms"]                   # stopped VM must NOT appear
+
+
+def test_check_vertex_returns_endpoint_list():
+    """check_vertex returns endpoint list from Vertex AI REST response."""
+    fake_endpoint = {"name": "projects/p/locations/us-central1/endpoints/123", "displayName": "test-ep"}
+
+    with patch("checks.requests.get") as mock_get, \
+         patch("checks._get_auth_headers", return_value={"Authorization": "Bearer fake"}):
+        mock_resp = MagicMock()                                        # fake requests.Response
+        mock_resp.json.return_value = {"endpoints": [fake_endpoint]}   # one endpoint in the response
+        mock_resp.raise_for_status = MagicMock()                       # no-op; simulate 200 OK
+        mock_get.return_value = mock_resp
+        result = check_vertex("proj", "us-central1")
+
+    assert len(result["endpoints"]) == 1                               # one endpoint returned
+    assert result["endpoints"][0]["displayName"] == "test-ep"          # endpoint data preserved
+
+
+def test_check_bigquery_sums_table_bytes():
+    """check_bigquery sums num_bytes across all datasets and tables."""
+    fake_ds = MagicMock()                                              # fake dataset list item
+    fake_ds.dataset_id = "my_dataset"
+
+    fake_tbl_item = MagicMock()                                        # fake table list item
+    fake_tbl_item.table_id = "my_table"
+
+    fake_table = MagicMock()                                           # fake full table metadata
+    fake_table.num_bytes = 2_000_000_000                               # 2 GB in bytes
+
+    with patch("checks.bigquery.Client") as MockClient:
+        mock_bq = MockClient.return_value                              # the client instance
+        mock_bq.list_datasets.return_value = [fake_ds]                # one dataset
+        mock_bq.list_tables.return_value = [fake_tbl_item]            # one table in the dataset
+        mock_bq.get_table.return_value = fake_table                   # table metadata with num_bytes set
+        result = check_bigquery("proj")
+
+    assert abs(result["total_gb"] - 2.0) < 0.001                      # 2 GB
+
+
+def test_check_spend_mtd_returns_cost_from_billing_table():
+    """check_spend_mtd returns month-to-date cost in INR from the billing export."""
+    fake_row = {"mtd_cost_inr": 312.5}                                 # fake billing query result row
+
+    with patch("checks.bigquery.Client") as MockClient:
+        MockClient.return_value.query.return_value.result.return_value = [fake_row]
+        result = check_spend_mtd("proj")
+
+    assert result["mtd_cost_inr"] == 312.5                             # cost value passed through unchanged
+
+
+def test_check_spend_mtd_returns_zero_on_missing_table():
+    """check_spend_mtd returns 0.0 when billing table does not exist (graceful)."""
+    with patch("checks.bigquery.Client") as MockClient:
+        MockClient.return_value.query.side_effect = Exception("Table not found: billing_export")
+        result = check_spend_mtd("proj")
+
+    assert result["mtd_cost_inr"] == 0.0                               # graceful zero — no alert fires on absent table
+
+
+def test_check_gcs_sums_blob_sizes_per_bucket():
+    """check_gcs returns per-bucket sizes in GB summed across all blobs."""
+    fake_bucket = MagicMock()                                          # fake bucket object
+    fake_bucket.name = "bike-demand-staging"
+
+    fake_blob = MagicMock()                                            # a single blob in the bucket
+    fake_blob.size = 100_000_000                                       # 0.1 GB
+
+    with patch("checks.storage.Client") as MockClient:
+        MockClient.return_value.list_buckets.return_value = [fake_bucket]
+        MockClient.return_value.list_blobs.return_value = [fake_blob]
+        result = check_gcs("proj")
+
+    assert "bike-demand-staging" in result["bucket_sizes"]             # bucket must appear in results
+    assert abs(result["bucket_sizes"]["bike-demand-staging"] - 0.1) < 0.001  # 0.1 GB
+
+
+def test_check_cloud_run_extracts_name_and_min_instances():
+    """check_cloud_run extracts short service names and minInstanceCount values."""
+    fake_service = {                                                    # Cloud Run v2 service resource dict
+        "name": "projects/proj/locations/us-central1/services/gbfs-poller",
+        "scaling": {"minInstanceCount": 0},                            # scale-to-zero = healthy
+    }
+
+    with patch("checks.requests.get") as mock_get, \
+         patch("checks._get_auth_headers", return_value={"Authorization": "Bearer fake"}):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"services": [fake_service]}    # one service in the response
+        mock_resp.raise_for_status = MagicMock()                      # no-op; simulate 200 OK
+        mock_get.return_value = mock_resp
+        result = check_cloud_run("proj", "us-central1")
+
+    assert result["services"][0]["name"] == "gbfs-poller"              # resource path stripped to short name
+    assert result["services"][0]["min_instances"] == 0                 # scale-to-zero confirmed

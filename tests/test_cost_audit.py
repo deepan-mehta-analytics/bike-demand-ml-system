@@ -36,13 +36,13 @@ def test_healthy_readings_produce_no_alerts(healthy_readings):          # pytest
 
 def test_registry_version_count_trips_alert(healthy_readings):          # pytest injects the fixture dict
     """Alert fires when a package has more versions than the limit."""
-    healthy_readings["registry"]["pkg_versions"]["bike-demand-api"] = 16  # one over the limit of 15
+    healthy_readings["registry"]["pkg_versions"]["bike-demand-api"] = 21  # one over the limit of 20
     alerts = evaluate_thresholds(healthy_readings)                      # fixture value mutated then evaluated
     assert any(a["check"] == "registry_versions" for a in alerts)
 
 def test_registry_total_size_trips_alert(healthy_readings):             # pytest injects the fixture dict
     """Alert fires when total repo size exceeds 10 GB."""
-    healthy_readings["registry"]["total_gb"] = 10.1                    # just over the 10 GB limit
+    healthy_readings["registry"]["total_gb"] = 15.1                    # just over the 15 GB limit
     alerts = evaluate_thresholds(healthy_readings)                      # fixture value mutated then evaluated
     assert any(a["check"] == "registry_size" for a in alerts)
 
@@ -380,7 +380,7 @@ def test_audit_handler_sends_email_when_threshold_tripped(monkeypatch):
     monkeypatch.setenv("DRY_RUN", "false")                             # ensure DRY_RUN is not active for this test
 
     tripped = _healthy_check_readings()                                 # start from healthy baseline
-    tripped["registry"]["pkg_versions"]["bike-demand-api"] = 20        # 20 versions > limit of 15 — trips an alert
+    tripped["registry"]["pkg_versions"]["bike-demand-api"] = 21        # 21 versions > limit of 20 — trips an alert
 
     fake_sm_response = MagicMock()                                      # fake Secret Manager response
     fake_sm_response.payload.data = b"https://hooks.slack.com/services/T/B/x"  # fake Slack webhook URL bytes stored in the secret

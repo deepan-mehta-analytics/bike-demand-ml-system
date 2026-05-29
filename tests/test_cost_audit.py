@@ -1,6 +1,6 @@
 # ── Imports ───────────────────────────────────────────────────────────────────
 import pytest                                                           # test framework
-from thresholds import evaluate_thresholds, THRESHOLDS                  # module under test
+from thresholds import evaluate_thresholds                              # module under test
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -122,8 +122,8 @@ def test_multiple_thresholds_tripped_returns_all_alerts(healthy_readings):  # py
 
 
 # ── notify.py tests ────────────────────────────────────────────────────────────
-from notify import format_alert_message, post_to_slack                  # formatter and delivery module under test
-from unittest.mock import patch, MagicMock                              # mock requests.post to avoid real network calls
+from notify import format_alert_message, post_to_slack                  # formatter and delivery module under test  # noqa: E402
+from unittest.mock import patch, MagicMock                              # mock requests.post to avoid real network calls  # noqa: E402
 
 
 def test_format_alert_message_contains_key_fields():                    # no fixture needed — alert dicts are constructed inline
@@ -169,7 +169,7 @@ def test_post_to_slack_returns_false_on_network_error():                # no fix
 
 
 # ── checks.py tests ────────────────────────────────────────────────────────────
-from checks import (                                                    # all seven check functions under test
+from checks import (                                                    # all seven check functions under test  # noqa: E402
     check_artifact_registry,
     check_compute,
     check_vertex,
@@ -336,7 +336,7 @@ def test_check_cloud_run_extracts_name_and_min_instances():
 
 
 # ── main.py integration tests ─────────────────────────────────────────────────
-import importlib                                                        # used to reload main module after env var changes
+import importlib                                                        # used to reload main module after env var changes  # noqa: E402
 
 
 def _healthy_check_readings():                                          # helper — NOT a pytest fixture, used only in integration tests

@@ -43,6 +43,7 @@ Three decisions in the version history show judgment beyond "make it work":
 [![Status](https://img.shields.io/badge/v4.1.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
 [![Status](https://img.shields.io/badge/v4.2.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/releases/tag/v4.2.0)
 [![Status](https://img.shields.io/badge/v4.3.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/releases/tag/v4.3.0)
+[![Status](https://img.shields.io/badge/v4.4.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/releases/tag/v4.4.0)
 [![Status](https://img.shields.io/badge/v3.1.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
 [![Cloud Run](https://img.shields.io/badge/Cloud_Run-Live-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://bike-demand-api-246440913351.us-central1.run.app)
 [![GBFS Poller](https://img.shields.io/badge/GBFS_Poller-Cloud_Run-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
@@ -126,7 +127,7 @@ bike-demand-ml-system/
 ├── requirements-poller.txt             ← v3.1.0 GBFS poller deps (fastapi, uvicorn, google-cloud-bigquery, httpx)
 ├── requirements-vertex.txt             ← training container deps (google-cloud-aiplatform, mlflow, pandas<3)
 ├── Dockerfile                          ← inference API image: python:3.11-slim, non-root user, health check
-├── Dockerfile.training                 ← training + trigger container; bakes 4 city CSVs (paris + chicago join in v4.4.0 S2); CMD runs retrain_job.py
+├── Dockerfile.training                 ← training + trigger container; bakes 4 city CSVs (paris + chicago join in v4.5.0 S2); CMD runs retrain_job.py
 ├── Dockerfile.poller                   ← v3.1.0 slim image for `gbfs-poller` Cloud Run service (FastAPI + BigQuery client)
 ├── docker-compose.yml                  ← local dev orchestration; models baked into image
 ├── .dockerignore                       ← excludes venv/, .git/, *.pkl from build context
@@ -441,7 +442,7 @@ The suite has eight modules (66 tests) across three tiers — 40 for the ML infe
 | `tests/test_pipeline.py` | Unit + Pipeline | Legacy Dataflow path: GBFS/TFL snapshot schema, ParseMessage DoFn, DirectRunner end-to-end; auto-skipped unless `requirements-pipeline.txt` is installed |
 | `tests/test_window_agg.py` | Unit | v3.1.0 poller: 5-minute window aggregator — empty input, single snapshot degenerate stats, multi-snapshot avg/min/max, multi-city/station keying, 2-decimal rounding parity with the Dataflow path |
 | `tests/test_gbfs_poller_service.py` | Unit | v3.1.0 poller: FastAPI service contract — health endpoint, poller trigger response shape |
-| `tests/test_cost_audit.py` | Unit + Integration | `cost-audit` service: `evaluate_thresholds` (11 tests across 9 check domains), `format_alert_message` + `post_to_slack` (4 tests), 7 resource-reading functions with mocked GCP clients (9 tests), `audit()` HTTP handler integration (2 tests — healthy silent, tripped Slack call) |
+| `tests/test_cost_audit.py` | Unit + Integration | `cost-audit` service: `evaluate_thresholds` (11 tests across 9 check domains), `format_alert_message` + `send_alert` (4 tests), 7 resource-reading functions with mocked GCP clients (9 tests), `audit()` HTTP handler integration (2 tests — healthy silent, tripped Slack call) |
 
 ```bash
 # Fast suite (schema, API, routing — excludes RMSE gates)
@@ -614,7 +615,7 @@ The ~16× spread between summer rush and middle-of-night confirms the model capt
 - ~~No hyperparameter tuning (GridSearch / Optuna)~~ — **v4.0.0 shipped:** `pipeline/retrain_job.py` runs a 6-combo `n_estimators` × `max_depth` sweep per city weekly on Vertex AI with an RMSE gate before promoting to MLflow Production ✅ (GridSearch/Optuna not currently used; the sweep is sufficient at portfolio scale)
 - ~~No experiment tracking (MLflow / Vertex AI)~~ — **v4.0.0 shipped:** `pipeline/retrain_job.py` weekly sweep + GCS-backed MLflow + RMSE gate; **4 of 6 cities** live in MLflow Production registry (Seoul / London / NYC / DC). Paris and Chicago train via the same Vertex AI job but have not yet been promoted to Production — tracked as an open candidate in [`PROJECT-STATUS.md`](PROJECT-STATUS.md) Next Step ✅
 - **Paris 2022 source export dropped as a data-quality gate** — the 2022 export from opendata.paris.fr peaks 2h later than 2023+2024 in both AM and PM rush hours and is DST-consistent within 2022, ruling out timezone-encoding causes (the parser is correct; the source aggregation is anomalous). 33% of available Paris source rows filtered out in v4.3.0 via a single reversible block in `data/fetch_paris_weather.py`. Root cause is intrinsic to the provider's internal aggregation pipeline and not user-fixable; revisit if upstream ever publishes a correction.
-- **No automated drift monitoring on inference inputs yet** — feature importances are logged to MLflow on every Vertex AI retrain, but there is no scheduled job that compares live weather distributions against the training baseline. Tracked in v4.4.0 design spec [`docs/superpowers/specs/2026-05-23-drift-monitoring-design.md`](docs/superpowers/specs/2026-05-23-drift-monitoring-design.md).
+- **No automated drift monitoring on inference inputs yet** — feature importances are logged to MLflow on every Vertex AI retrain, but there is no scheduled job that compares live weather distributions against the training baseline. Tracked in v4.5.0 design spec [`docs/superpowers/specs/2026-05-23-drift-monitoring-design.md`](docs/superpowers/specs/2026-05-23-drift-monitoring-design.md).
 - No request authentication or rate-limiting on the API
 - ~~No structured logging or observability hooks~~ — structured JSON → Cloud Logging + Prometheus `/metrics` shipped in v2.1.0 ✅
 - ~~Dataflow streaming pipeline has no always-free tier (~$0.05/hr on e2-medium) — run only for demos~~ — **Superseded 2026-05-25 by v3.1.0:** Cloud Run `gbfs-poller` + Cloud Scheduler (every 5 min) + BigQuery 7-day partitioned `station_snapshots` table replaces the Dataflow path at zero always-free-tier cost ✅
@@ -720,6 +721,21 @@ Replaces the paused Dataflow streaming path with a zero-always-free-tier Cloud R
 - [x] End-to-end verified — 6,032 rows / 5-minute window across NYC / DC / London / Chicago; GCP Stream tab in the companion R Shiny dashboard now streams within ~10 min of scheduler start
 - [x] CI hotfix `7d43a81` — removed unused `import pytest` in `tests/test_window_agg.py` that gated Ruff lint for 4 commits running
 - [x] Cost optimization (2026-05-28) — `/poll` now takes a **single snapshot per 5-minute window** (`POLL_ITERATIONS=1`), down from 5 polls with 4×60s in-request sleeps. Cloud Run billed the full ~248s/run on 1 vCPU (~$46/mo, over the always-free tier); each run is now ~4s. The dashboard's min/max ribbon is driven by cross-station spread (the Shiny query takes `MIN`/`MAX` across stations), not intra-window time samples, so a single snapshot per station is visually identical. `window_agg` is unchanged — it already returns degenerate avg=min=max stats for a one-sample window.
+
+### Phase 9 — Automated Cost Audit ✅ Done (v4.4.0 — 2026-05-29)
+
+Spec: [`docs/superpowers/specs/2026-05-28-cost-audit-design.md`](docs/superpowers/specs/2026-05-28-cost-audit-design.md)
+
+A daily read-only audit that catches resource accumulation (registry bloat, forgotten VMs, growing BQ/GCS, unexpected services, Vertex endpoints) and month-to-date overspend early — built so the automation itself **cannot** add cost. Born from the Artifact Registry silently growing to ~38 GB / 140 image versions because CI pushed an image on every commit with nothing pruning them.
+
+- [x] `cost-audit/thresholds.py` — pure `evaluate_thresholds(readings)`: tunable threshold config + per-domain alert logic; no GCP calls (trivially unit-testable)
+- [x] `cost-audit/checks.py` — 7 read-only resource readers (Artifact Registry, Compute, Vertex via REST, BigQuery storage + MTD billing query, GCS, Cloud Run via REST); each independent so one failed read never aborts the scan
+- [x] `cost-audit/notify.py` — `format_alert_message` (Slack mrkdwn) + `send_alert` (incoming-webhook POST)
+- [x] `cost-audit/main.py` — functions-framework HTTP handler: runs all checks, evaluates, posts to Slack **only on breach** (silent on healthy days), always returns 200, `DRY_RUN` support
+- [x] `tests/test_cost_audit.py` — 26 tests (11 threshold eval + 4 notify + 9 mocked check functions + 2 handler integration)
+- [x] GCP provisioned — private `cost-audit` Cloud Run service (`maxScale=1`, read-only `cost-audit-sa`); `cost-audit-cron` Cloud Scheduler (daily 09:00 UTC, OIDC); Slack webhook URL in Secret Manager
+- [x] Cost-safety — Scheduler-triggered (not Pub/Sub-push, structurally avoids the kill-switch retry-storm); all free-tier reads; no Cloud Monitoring custom-metric writes; ~450 vCPU-sec/month vs 180k free
+- [x] End-to-end verified — live run tripped 2 real registry-bloat thresholds and delivered the alert to Slack; delivery switched email → Slack incoming webhook (Microsoft app passwords require 2FA + consumer Outlook SMTP basic-auth is deprecated)
 
 ### Phase 7 — Automated Test Suite ✅ Done (2026-05-18)
 

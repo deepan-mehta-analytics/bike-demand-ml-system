@@ -11,7 +11,7 @@ Both repos form a single portfolio system. Track them together here.
 
 | Repo | Role | Current Phase | Status | Last Commit |
 |------|------|--------------|--------|-------------|
-| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v3.1.0 shipped — Cloud Run GBFS poller (`gbfs-poller` + `gbfs-poller-cron` + BQ 7-day partitions) replacing the v3.0.0 Dataflow path; GCP Stream tab live. (Joint cross-repo work tracked as Shiny v1.6.0 Sprint 1.) v4.3.0 was Paris tz fix; v4.4.0 drift monitoring in design (S1 complete) | ✅ Done | `b8abd72` |
+| **bike-demand-ml-system** (this repo) | Python FastAPI + ML training | v3.1.0 shipped — Cloud Run GBFS poller (`gbfs-poller` + `gbfs-poller-cron` + BQ 7-day partitions) replacing the v3.0.0 Dataflow path; GCP Stream tab live. (Joint cross-repo work tracked as Shiny v1.6.0 Sprint 1.) v4.3.0 was Paris tz fix; v4.4.0 automated cost-audit shipped (Cloud Run + Scheduler + Slack); v4.5.0 drift monitoring in design (S1 complete) | ✅ Done | `a156e9e` |
 | **bike_demand_prediction** | R Shiny dashboard | v1.5.0 shipped — testthat suite + CI; v1.6.0 Sprint 1 (Workstream A) shipped — GCP Stream tab live via Cloud Run poller; v1.6.0 Sprint 2 (Workstream B — forecast freshness + honest demo) SHIPPED 2026-05-25 (reactive weather + sinusoidal demo data + UI text); Sprint 3 (Workstream C) next | ✅ Done | `28a94dc` |
 
 ### Trained City Models
@@ -178,23 +178,25 @@ Both repos form a single portfolio system. Track them together here.
 
 **Tracked follow-ups block now empty for the first time since pre-v4.2.0.** All 3 v4.2.0 carry-overs (Paris tz fix; `train.py` cp1252 stdout sweep; MAE rows in NYC/DC RF tables) shipped in v4.3.0.
 
-**Next priority — v4.4.0 in design (S1 complete 2026-05-23).** Spec [`docs/superpowers/specs/2026-05-23-drift-monitoring-design.md`](docs/superpowers/specs/2026-05-23-drift-monitoring-design.md) (commit `dac2990`) + plan [`docs/superpowers/plans/2026-05-23-drift-monitoring.md`](docs/superpowers/plans/2026-05-23-drift-monitoring.md) (commit `e8d26bb`) committed + pushed to `main`. v4.4.0 scope:
+**v4.4.0 shipped 2026-05-29 — automated cost audit live.** Spec [`docs/superpowers/specs/2026-05-28-cost-audit-design.md`](docs/superpowers/specs/2026-05-28-cost-audit-design.md) → `cost-audit/` package (`thresholds.py` pure evaluation, `checks.py` 7 read-only GCP resource readers, `notify.py` Slack delivery, `main.py` functions-framework HTTP handler). Daily Cloud Scheduler (`cost-audit-cron`, 09:00 UTC, OIDC) → private Cloud Run `cost-audit` service (maxScale=1, read-only `cost-audit-sa`) → evaluates registry / Compute / Vertex / BigQuery / GCS / Cloud Run / MTD-spend against thresholds → posts to Slack only on breach (silent on healthy days). Structurally zero-cost: Scheduler-trigger (not Pub/Sub-push, avoids the kill-switch retry-storm failure), all free-tier reads, no Cloud Monitoring writes. 26 tests; e2e verified live (2 real registry-bloat alerts delivered to Slack). Delivery switched email → Slack incoming webhook (Microsoft app passwords require 2FA + consumer Outlook SMTP basic-auth is deprecated). Commits `cb055d2`→`a156e9e`.
+
+**Next priority — v4.5.0 in design (S1 complete 2026-05-23).** Spec [`docs/superpowers/specs/2026-05-23-drift-monitoring-design.md`](docs/superpowers/specs/2026-05-23-drift-monitoring-design.md) (commit `dac2990`) + plan [`docs/superpowers/plans/2026-05-23-drift-monitoring.md`](docs/superpowers/plans/2026-05-23-drift-monitoring.md) (commit `e8d26bb`) committed + pushed to `main`. v4.5.0 scope:
 - **Drift monitoring** — `monitoring/` package: weekly Open-Meteo refetch + PSI per weather feature vs same-season training baseline; GitHub Actions cron commits markdown report back to `main` with `[skip ci]`; zero paid GCP surface
 - **MLflow 6/6 promotion** — bundled pre-flight: `Dockerfile.training:38-41` 2-line edit copies Paris + Chicago CSVs; Vertex AI re-run promotes both to MLflow Production registry; closes "4 of 6 cities" Known Limitation
 
 Sprint cadence S1 → S2 (MLflow pre-flight) → S3 (drift module + 6 baselines, TDD) → S4 (GHA cron + manual smoke) → S5 (close-out + release) per [[session-shape-token-efficiency]].
 
-**Other open candidates (not bundled into v4.4.0, available for v4.5+):**
+**Other open candidates (not bundled into v4.5.0, available for v4.6+):**
 - (a) Shiny Phase 8 / v1.7 — `shinytest2` browser harness (new R tooling, multi-session arc)
 - ~~(b) Shiny Priority 6 — upgrade Seoul **live station** feed from the 5-station `sample` key to a registered key~~ — **Demoted 2026-05-23** to runtime `.Renviron` config on the Shiny side (integration already shipped in commit `8682242`); no longer an open candidate. Documented under Shiny README "Optional — Seoul full-coverage upgrade".
 - (c) Investigate the Paris 2022 anomaly root cause upstream (opendata.paris.fr) to potentially re-enable that 33% of data; reversible via single block in `data/fetch_paris_weather.py`
-- (d) Concept drift on the Paris + London uniform-cadence subset — only cities with weekly trip-data publication; defer until v4.4.0 ships and v4.5+ scope is reviewed
+- (d) Concept drift on the Paris + London uniform-cadence subset — only cities with weekly trip-data publication; defer until v4.5.0 ships and v4.6+ scope is reviewed
 - (e) Any new ML / data-engineering thread
 
 **v3.1.0 shipped 2026-05-25 — Cloud Run GBFS poller live.** Requirements (`6d6e5a2`) → `window_agg.py` TDD (`a83e0a6`) → `gbfs_poller_service.py` TDD (`fbb5ef5`) → `Dockerfile.poller` + smoke test (`9f86cb3`) → SA + IAM + GAR push + Cloud Run deploy + Scheduler + BQ 7-day partition. 6,032 rows/window across nyc/dc/london/chicago confirmed in BQ. GCP Stream tab live within 10 min of scheduler start. ML release tag `v3.1.0`; Shiny tracks the same work as Sprint 1 of its v1.6.0 dashboard-truth-and-freshness ship.
 
 **v1.6.0 Sprint 2 (Shiny Workstream B — forecast freshness + honest demo) is next on the Shiny side.** Requires a separate brainstorming → writing-plans → executing-plans cycle in the Shiny repo; no ML-repo code changes expected.
 
-*v4.4.0 design landed 2026-05-23 — commits dac2990 + e8d26bb. v4.3.0 Paris fix shipped 2026-05-21 — commits f713ae5 + 15312b4. v4.2.0 Seoul refresh shipped 2026-05-21 — commit 64ac1d2. Phase 7 complete 2026-05-18 — commit 8bcdb4c. v1.4.0 Paris + Chicago shipped 2026-05-18 — commit d8ee4e0. Phase 5 (Vertex AI + MLflow) complete — v4.0.0 shipped 2026-05-17.*
+*v4.4.0 cost-audit shipped 2026-05-29 — commits cb055d2→a156e9e. v4.5.0 drift design landed 2026-05-23 — commits dac2990 + e8d26bb. v4.3.0 Paris fix shipped 2026-05-21 — commits f713ae5 + 15312b4. v4.2.0 Seoul refresh shipped 2026-05-21 — commit 64ac1d2. Phase 7 complete 2026-05-18 — commit 8bcdb4c. v1.4.0 Paris + Chicago shipped 2026-05-18 — commit d8ee4e0. Phase 5 (Vertex AI + MLflow) complete — v4.0.0 shipped 2026-05-17.*
 
 Resume with: `"resume bike demand — Sprint 2 Workstream B (Shiny forecast freshness)"`

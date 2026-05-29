@@ -377,6 +377,10 @@ def test_audit_handler_calls_slack_when_threshold_tripped(monkeypatch):
     """Handler calls post_to_slack exactly once when at least one threshold is breached."""
     import sys                                                          # needed to inject a fake secretmanager into sys.modules
 
+    # ORDER MATTERS (1 of 3): setenv must happen BEFORE importlib.reload.
+    # main.py reads os.environ["DRY_RUN"] at module load time (not inside audit()).
+    # If reload runs first, it captures the old env value and the branch that skips
+    # Slack is taken, making mock_slack.assert_called_once() fail.
     monkeypatch.setenv("DRY_RUN", "false")                             # ensure DRY_RUN is not active for this test
 
     tripped = _healthy_check_readings()                                 # start from healthy baseline
@@ -389,10 +393,21 @@ def test_audit_handler_calls_slack_when_threshold_tripped(monkeypatch):
     mock_sm_module.SecretManagerServiceClient.return_value \
         .access_secret_version.return_value = fake_sm_response         # wire the fake client method to return the fake response
 
+    # ORDER MATTERS (2 of 3): reload happens AFTER setenv so the fresh module
+    # sees the correct DRY_RUN value.  It must also happen BEFORE the
+    # sys.modules injection below, because reload re-executes the top-level
+    # import statements in main.py — any sys.modules entry set before reload
+    # may be overwritten by the re-import machinery.
     import main as audit_main                                           # import module reference for reload and patching
     importlib.reload(audit_main)                                        # reload to pick up the monkeypatched DRY_RUN env var
 
-    # Inject fake secretmanager into sys.modules so the local import inside audit() picks it up
+    # ORDER MATTERS (3 of 3): inject the fake secretmanager AFTER reload but
+    # BEFORE audit() is called.  audit() contains a local `from google.cloud
+    # import secretmanager` — Python resolves that import by checking
+    # sys.modules first, so the entry must be present at the moment audit()
+    # executes, not at module-load time.  Injecting it before reload would
+    # risk the reload overwriting the entry; injecting it after audit() would
+    # be too late and the real SDK import (which may fail in CI) would run.
     monkeypatch.setitem(sys.modules, "google.cloud.secretmanager", mock_sm_module)  # intercept the local import
 
     with patch("main.check_artifact_registry", return_value=tripped["registry"]), \

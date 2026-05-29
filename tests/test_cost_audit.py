@@ -119,3 +119,50 @@ def test_multiple_thresholds_tripped_returns_all_alerts(healthy_readings):  # py
     checks = [a["check"] for a in alerts]                              # collect all check names for assertion
     assert "compute_vms" in checks                                     # compute breach must appear
     assert "spend_mtd" in checks                                       # spend breach must appear
+
+
+# ── notify.py tests ────────────────────────────────────────────────────────────
+from notify import format_alert_message, post_to_slack                  # formatter and delivery module under test
+from unittest.mock import patch, MagicMock                              # mock requests.post to avoid real network calls
+
+
+def test_format_alert_message_contains_key_fields(healthy_readings):    # pytest fixture injected — fresh dict per test
+    """Formatted message includes recognisable content for each alert type."""
+    alerts = [
+        {"check": "registry_versions", "pkg": "bike-demand-api", "count": 20, "limit": 15},
+        {"check": "compute_vms", "vms": ["instance-old"]},
+        {"check": "spend_mtd", "mtd_cost_inr": 600.0, "limit": 500.0},
+    ]
+    msg = format_alert_message(alerts)                                  # call formatter with mixed alert types
+    assert "bike-demand-api" in msg                                     # registry package name must appear
+    assert "instance-old" in msg                                        # VM name must appear
+    assert "₹600" in msg                                                # spend amount must appear
+    assert "🚨" in msg                                                  # header emoji must appear
+
+
+def test_post_to_slack_returns_true_on_200(healthy_readings):           # fixture injected (unused here but consistent signature)
+    """post_to_slack returns True when webhook responds with HTTP 200."""
+    with patch("notify.requests.post") as mock_post:                    # intercept the requests.post call
+        mock_response = MagicMock()                                     # create a fake response object
+        mock_response.status_code = 200                                 # simulate Slack accepting the message
+        mock_post.return_value = mock_response                          # patch returns the fake response
+        result = post_to_slack("test message", "https://hooks.slack.com/fake")
+    assert result is True                                               # 200 → True
+
+
+def test_post_to_slack_returns_false_on_non_200(healthy_readings):      # fixture injected (unused but consistent)
+    """post_to_slack returns False when webhook returns a non-200 status."""
+    with patch("notify.requests.post") as mock_post:
+        mock_response = MagicMock()
+        mock_response.status_code = 400                                 # simulate Slack rejecting the message
+        mock_post.return_value = mock_response
+        result = post_to_slack("test message", "https://hooks.slack.com/fake")
+    assert result is False                                              # non-200 → False
+
+
+def test_post_to_slack_returns_false_on_network_error(healthy_readings):  # fixture injected (unused but consistent)
+    """post_to_slack returns False (not raises) when a network error occurs."""
+    import requests as req                                              # real requests module — used only for the exception class
+    with patch("notify.requests.post", side_effect=req.ConnectionError("timeout")):
+        result = post_to_slack("test message", "https://hooks.slack.com/fake")
+    assert result is False                                              # network error → False, never an exception

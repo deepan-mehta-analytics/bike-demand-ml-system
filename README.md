@@ -1,13 +1,31 @@
 # 🚴 Bike Demand ML System
 
 ## ⚡ Quick Summary
-This project is the **Python ML backend** in a two-repo portfolio system. It forecasts hourly bike-rental demand from weather and temporal signals, exposes the model through a FastAPI inference API, and is consumed by the companion [R Shiny dashboard](https://github.com/deepan-mehta-analytics/bike-demand-prediction) via `httr::POST /predict`. The architecture separates training from inference cleanly, persists model artifacts for reproducible deployment, and is containerised for local and cloud deployment.
 
-**v4.3.0 + v3.1.0 are live.** A `bike-demand-trigger` Cloud Run service submits a 6-combo hyperparameter sweep to Vertex AI every Sunday, with SQLite+GCS-backed MLflow experiment tracking and a 3% RMSE gate before promoting models to Production — all 6 city models verified. The training data is refreshed iteratively: Seoul moved to a 3-year OA-15182 + Open-Meteo build in v4.2.0 (RMSE 1,503.52, 26,303 hourly rows), and Paris was re-aligned to wall-clock-local time in v4.3.0 (RMSE 20.51, mirroring the Seoul tz-fix precedent in commit `176e182`, with a 2022-anomaly drop applied as a data-quality gate). A 40-test pytest suite enforces RMSE gates, schema consistency, per-city routing, Dataflow pipeline contracts, and the v3.1.0 poller's 5-minute window aggregator across all 6 cities on every push to main. The FastAPI inference API runs on GCP Cloud Run at `https://bike-demand-api-246440913351.us-central1.run.app` with structured JSON logging and a Prometheus `/metrics` endpoint. **v3.1.0 (2026-05-25)** replaced the paid Dataflow streaming path with a Cloud Run `gbfs-poller` service driven by Cloud Scheduler every 5 minutes, writing to a BigQuery 7-day partitioned `station_snapshots` table at zero always-free-tier cost (6,032 rows/window across NYC / DC / London / Chicago verified). The original Apache Beam Dataflow job (`pipeline/dataflow_job.py`) is retained intact for potential resurrection.
+This project started as the **Python ML backend** for a companion R Shiny capstone dashboard — a FastAPI service wrapping a Seoul Random Forest model. It didn't stop there. Across six shipped versions it grew into a multi-city ML platform: managed retraining on Vertex AI, MLflow experiment tracking, a GCS-backed model registry with RMSE promotion gates, a live GBFS station data pipeline, and a CI-enforced accuracy test suite. The origin is still visible in the architecture; the engineering layers built on top are the portfolio signal.
 
-It is engineered as the next stage in a data analytics → data engineering → ML engineering trajectory: a model that ships to an API, not a notebook that ships to a screenshot.
+**What it became — across six shipped versions**
 
-### End-to-End ML System with FastAPI Inference, Service-Layer Architecture & Random Forest Regressor
+- **Multi-city Random Forest inference API** — per-city RF models for all 6 cities (Seoul, London, NYC, Washington DC, Paris, Chicago) served via a Pydantic-validated `/predict` endpoint on GCP Cloud Run; lazy-loaded singleton service layer decouples business logic from the API surface; train/serve feature schema persisted via `joblib` to prevent skew.
+- **Vertex AI managed retraining** — a `bike-demand-trigger` Cloud Run service submits a 6-combo hyperparameter sweep to Vertex AI every Sunday; results tracked in SQLite + GCS-backed MLflow; a 3% RMSE gate enforces model quality before any city model is promoted to the Production registry.
+- **Per-city data pipelines** — Open-Meteo historical API + GBFS open data fetchers for each city; Seoul rebuilt to a 3-year OA-15182 hourly scope (v4.2.0, 26,303 rows, RMSE 1,503.52); Paris re-aligned to wall-clock-local time with a 2022 anomaly data-quality drop (v4.3.0, RMSE 20.51).
+- **CI-enforced accuracy gates** — 40-test pytest suite: schema guards, per-city RMSE gates, no-fallback routing guarantees, Dataflow pipeline contracts, and GBFS 5-min window aggregator unit tests; enforced on every push via GitHub Actions.
+
+**Engineering choices that signal the skills**
+
+Three decisions in the version history show judgment beyond "make it work":
+
+*GCP pipeline right-sizing (v3.1.0):* The live station data pipeline shipped first as **Apache Beam / Dataflow** — managed streaming, Pub/Sub ingestion, windowed aggregations. After running it in production, it was rebuilt:
+
+- **Why Dataflow was wrong** — designed for large-scale continuous streams; polling six GBFS endpoints every five minutes is a cron job, not a streaming problem. Dataflow was burning paid GCP resources on a workload that never needed its machinery.
+- **What replaced it** — a **Cloud Run** service triggered by **Cloud Scheduler** (5-min cron, OIDC auth), writing station snapshots to a BigQuery 7-day partitioned table via load jobs — unconditionally free at this volume.
+- **Outcome** — the same live data in the Shiny GCP Stream tab; zero always-free-tier cost; no Beam pipeline, no job monitoring.
+
+*Data quality discipline (v4.3.0):* Paris 2022 training data was dropped as a data-quality gate after identifying anomalous ridership during the post-COVID re-opening period. RMSE improved from 23.30 → 20.51. Knowing when to *exclude* data — and being able to justify it against the metric — is a model engineering judgment the RMSE tables in this repo make explicit.
+
+*Service-layer architecture:* Business logic lives in `services/predictor.py`, not in `api/app.py`. The API surface calls the service; the service calls the inference pipeline. This decoupling means logging, monitoring, A/B testing, or model versioning can be wired in without touching the API contract — a standard production ML engineering pattern that notebook-to-API migrations routinely skip.
+
+### Capstone companion backend. Evolved into a production ML platform. The engineering layers are the portfolio.
 
 ---
 

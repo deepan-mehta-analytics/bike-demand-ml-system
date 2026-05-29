@@ -1,12 +1,19 @@
 # ── Imports ───────────────────────────────────────────────────────────────────
-import requests                                                         # HTTP client for Slack incoming webhook POST
+import smtplib                                                          # stdlib SMTP client — no extra dep needed
+from email.mime.text import MIMEText                                    # builds plain-text email body
+from email.mime.multipart import MIMEMultipart                          # wraps subject + body into one message object
+
+
+# ── Email config ──────────────────────────────────────────────────────────────
+SMTP_HOST = "smtp-mail.outlook.com"                                     # Microsoft/Outlook SMTP server
+SMTP_PORT = 587                                                         # STARTTLS port
 
 
 # ── Message Formatter ─────────────────────────────────────────────────────────
 
-def format_alert_message(alerts: list) -> str:                          # converts alert dicts to a single Slack-ready string
-    """Format a list of alert dicts into a Slack message string."""
-    lines = ["🚨 *GCP Cost Audit — Thresholds Tripped*"]               # header line — always present when this function is called
+def format_alert_message(alerts: list) -> str:                          # converts alert dicts to a single human-readable string
+    """Format a list of alert dicts into a plain-text alert message."""
+    lines = ["GCP Cost Audit - Thresholds Tripped"]                    # email-safe header (no emoji — avoids MIME encoding issues)
     for alert in alerts:                                                # one bullet per alert dict
         check = alert["check"]                                          # discriminator key that selects the right message template
         if check == "registry_versions":
@@ -56,23 +63,21 @@ def format_alert_message(alerts: list) -> str:                          # conver
     return "\n".join(lines)                                             # single string; Slack renders \n as line breaks
 
 
-# ── Slack Delivery ────────────────────────────────────────────────────────────
+# ── Email Delivery ───────────────────────────────────────────────────────────
 
-SLACK_CHANNEL = "#gcp-alerts"                                           # channel the bot posts cost-audit alerts to
-
-def post_to_slack(message: str, bot_token: str) -> bool:                # posts via Slack Web API chat.postMessage; non-fatal on failure
-    """POST message to Slack using a bot token. Returns True on success, False otherwise."""
+def send_alert(message: str, from_addr: str, to_addr: str, app_password: str) -> bool:
+    """Send alert email via Outlook SMTP. Returns True on success, False otherwise."""
     try:
-        resp = requests.post(                                           # Slack Web API endpoint — works with any bot token
-            "https://slack.com/api/chat.postMessage",
-            headers={"Authorization": f"Bearer {bot_token}"},          # bot token stored in Secret Manager (xoxb-...)
-            json={                                                      # payload for chat.postMessage
-                "channel": SLACK_CHANNEL,                              # target channel; bot must be invited to it
-                "text": message,                                        # message body; Slack renders *bold* and `code` markdown
-            },
-            timeout=10,                                                 # 10-second timeout; network errors are non-fatal
-        )
-        data = resp.json()                                              # Slack always returns JSON even on failure
-        return resp.status_code == 200 and data.get("ok") is True      # Slack sets ok=true on success, ok=false with error key on failure
-    except requests.RequestException:                                   # covers ConnectionError, Timeout, etc.
+        msg = MIMEMultipart()                                           # container for headers + body
+        msg["From"] = from_addr                                         # sender address (same as login for Outlook)
+        msg["To"] = to_addr                                             # recipient — typically the same address
+        msg["Subject"] = "GCP Cost Audit — Thresholds Tripped"         # plain ASCII subject avoids MIME encoding edge cases
+        msg.attach(MIMEText(message, "plain"))                          # attach body as plain text
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:             # open connection to Outlook SMTP
+            server.starttls()                                           # upgrade to TLS before sending credentials
+            server.login(from_addr, app_password)                      # authenticate with the Microsoft App Password
+            server.send_message(msg)                                    # deliver the email
+        return True                                                     # no exception = delivery accepted by SMTP server
+    except Exception:                                                   # catches SMTP errors, auth failures, network issues
         return False                                                    # failure is logged by caller; never raises here

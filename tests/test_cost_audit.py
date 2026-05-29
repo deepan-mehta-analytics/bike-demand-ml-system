@@ -122,8 +122,8 @@ def test_multiple_thresholds_tripped_returns_all_alerts(healthy_readings):  # py
 
 
 # ── notify.py tests ────────────────────────────────────────────────────────────
-from notify import format_alert_message, post_to_slack                  # formatter and delivery module under test  # noqa: E402
-from unittest.mock import patch, MagicMock                              # mock requests.post to avoid real network calls  # noqa: E402
+from notify import format_alert_message, send_alert                     # formatter and delivery module under test  # noqa: E402
+from unittest.mock import patch, MagicMock                              # mock smtplib to avoid real network calls  # noqa: E402
 
 
 def test_format_alert_message_contains_key_fields():                    # no fixture needed — alert dicts are constructed inline
@@ -136,37 +136,33 @@ def test_format_alert_message_contains_key_fields():                    # no fix
     msg = format_alert_message(alerts)                                  # call formatter with mixed alert types
     assert "bike-demand-api" in msg                                     # registry package name must appear
     assert "instance-old" in msg                                        # VM name must appear
-    assert "₹600" in msg                                                # spend amount must appear
-    assert "🚨" in msg                                                  # header emoji must appear
+    assert "600" in msg                                                 # spend amount must appear (no emoji in email format)
+    assert "Thresholds Tripped" in msg                                  # header line must appear
 
 
-def test_post_to_slack_returns_true_on_200():                           # no fixture needed — only mocks are used
-    """post_to_slack returns True when Slack API responds with HTTP 200 and ok=true."""
-    with patch("notify.requests.post") as mock_post:                    # intercept the requests.post call to chat.postMessage
-        mock_response = MagicMock()                                     # create a fake response object
-        mock_response.status_code = 200                                 # simulate HTTP 200
-        mock_response.json.return_value = {"ok": True}                  # Slack Web API signals success via ok=true in JSON body
-        mock_post.return_value = mock_response
-        result = post_to_slack("test message", "xoxb-fake-token")       # bot token replaces webhook URL
-    assert result is True                                               # 200 + ok=true → True
+def test_send_alert_returns_true_on_success():                          # no fixture needed — only mocks are used
+    """send_alert returns True when email is delivered without SMTP error."""
+    with patch("notify.smtplib.SMTP") as mock_smtp_cls:                 # mock the SMTP constructor so no real connection is made
+        mock_server = MagicMock()                                       # fake SMTP server instance
+        mock_smtp_cls.return_value.__enter__ = lambda s: mock_server    # support `with smtplib.SMTP(...) as server:`
+        mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
+        result = send_alert("test message", "a@live.com", "a@live.com", "fake-password")
+    assert result is True                                               # no exception → True
 
 
-def test_post_to_slack_returns_false_on_slack_error():                  # no fixture needed — only mocks are used
-    """post_to_slack returns False when Slack returns ok=false (e.g. invalid token)."""
-    with patch("notify.requests.post") as mock_post:
-        mock_response = MagicMock()
-        mock_response.status_code = 200                                 # HTTP 200 but Slack signals failure in body
-        mock_response.json.return_value = {"ok": False, "error": "invalid_auth"}
-        mock_post.return_value = mock_response
-        result = post_to_slack("test message", "xoxb-fake-token")
-    assert result is False                                              # ok=false → False even with HTTP 200
+def test_send_alert_returns_false_on_auth_failure():                    # no fixture needed — only mocks are used
+    """send_alert returns False when SMTP raises an exception (e.g. bad password)."""
+    with patch("notify.smtplib.SMTP") as mock_smtp_cls:
+        mock_smtp_cls.side_effect = Exception("authentication failed")  # simulate SMTP login rejection
+        result = send_alert("test message", "a@live.com", "a@live.com", "wrong-password")
+    assert result is False                                              # exception → False, never propagates
 
 
-def test_post_to_slack_returns_false_on_network_error():                # no fixture needed — only mocks are used
-    """post_to_slack returns False (not raises) when a network error occurs."""
-    import requests as req                                              # real requests module — used only for the exception class
-    with patch("notify.requests.post", side_effect=req.ConnectionError("timeout")):
-        result = post_to_slack("test message", "xoxb-fake-token")
+def test_send_alert_returns_false_on_network_error():                   # no fixture needed — only mocks are used
+    """send_alert returns False (not raises) when network is unreachable."""
+    with patch("notify.smtplib.SMTP") as mock_smtp_cls:
+        mock_smtp_cls.side_effect = OSError("network unreachable")      # simulate connection failure
+        result = send_alert("test message", "a@live.com", "a@live.com", "fake-password")
     assert result is False                                              # network error → False, never an exception
 
 
@@ -365,18 +361,18 @@ def test_audit_handler_silent_when_all_healthy():
          patch("main.check_spend_mtd",         return_value=healthy["spend"]), \
          patch("main.check_gcs",               return_value=healthy["gcs"]), \
          patch("main.check_cloud_run",         return_value=healthy["cloud_run"]), \
-         patch("main.post_to_slack")           as mock_slack:          # Slack must never be called on a healthy day
+         patch("main.send_alert")           as mock_alert:          # email must never be sent on a healthy day
         import main as audit_main                                       # import after patches are in place
         fake_request = MagicMock()                                      # functions-framework passes a Flask Request object
         body, status = audit_main.audit(fake_request)
 
     assert status == 200                                                # always 200
     assert "healthy" in body                                            # response body confirms healthy state
-    mock_slack.assert_not_called()                                      # core contract: no Slack POST on a healthy day
+    mock_alert.assert_not_called()                                      # core contract: no email on a healthy day
 
 
-def test_audit_handler_calls_slack_when_threshold_tripped(monkeypatch):
-    """Handler calls post_to_slack exactly once when at least one threshold is breached."""
+def test_audit_handler_sends_email_when_threshold_tripped(monkeypatch):
+    """Handler calls send_alert exactly once when at least one threshold is breached."""
     import sys                                                          # needed to inject a fake secretmanager into sys.modules
 
     # ORDER MATTERS (1 of 3): setenv must happen BEFORE importlib.reload.
@@ -389,7 +385,7 @@ def test_audit_handler_calls_slack_when_threshold_tripped(monkeypatch):
     tripped["registry"]["pkg_versions"]["bike-demand-api"] = 20        # 20 versions > limit of 15 — trips an alert
 
     fake_sm_response = MagicMock()                                      # fake Secret Manager response
-    fake_sm_response.payload.data = b"https://hooks.slack.com/fake"   # fake webhook URL bytes stored in the secret
+    fake_sm_response.payload.data = b"fake-app-password"              # fake Microsoft App Password bytes stored in the secret
 
     mock_sm_module = MagicMock()                                        # fake google.cloud.secretmanager module
     mock_sm_module.SecretManagerServiceClient.return_value \
@@ -419,9 +415,9 @@ def test_audit_handler_calls_slack_when_threshold_tripped(monkeypatch):
          patch("main.check_spend_mtd",         return_value=tripped["spend"]), \
          patch("main.check_gcs",               return_value=tripped["gcs"]), \
          patch("main.check_cloud_run",         return_value=tripped["cloud_run"]), \
-         patch("main.post_to_slack")           as mock_slack:          # intercept Slack delivery
-        mock_slack.return_value = True                                  # simulate Slack accepting the message
+         patch("main.send_alert")           as mock_alert:          # intercept email delivery
+        mock_alert.return_value = True                                  # simulate email accepted
         body, status = audit_main.audit(MagicMock())
 
     assert status == 200                                                # always 200
-    mock_slack.assert_called_once()                                     # exactly one Slack POST when a threshold trips
+    mock_alert.assert_called_once()                                     # exactly one email when a threshold trips

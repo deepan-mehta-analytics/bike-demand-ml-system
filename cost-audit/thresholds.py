@@ -7,13 +7,13 @@ THRESHOLDS = {                                                          # single
     "vertex_max_endpoints": 0,                                          # alert on ANY Vertex endpoint (no free tier for endpoints)
     "bigquery_max_total_gb": 8.0,                                       # alert at 8 GB (free 10 GB storage)
     "gcs_max_bucket_gb": 4.0,                                           # alert at 4 GB per bucket (free 5 GB total)
-    "cloud_run_allowlist": {                                            # services that are expected and approved
+    "cloud_run_allowlist": frozenset({                                  # immutable set — prevents accidental runtime mutation
         "bike-demand-api",                                              # inference API
         "gbfs-poller",                                                  # GBFS station poller
         "bike-demand-trigger",                                          # Vertex AI trigger
         "billing-kill-switch",                                          # budget protection
         "cost-audit",                                                   # this service
-    },
+    }),
     "spend_mtd_max_inr": 500.0,                                         # alert when month-to-date spend exceeds ₹500
 }
 
@@ -77,7 +77,7 @@ def evaluate_thresholds(readings: dict) -> list:                        # evalua
     # ── Cloud Run ──────────────────────────────────────────────────────────────
     allowlist = THRESHOLDS["cloud_run_allowlist"]                       # set of approved service names
     for svc in readings.get("cloud_run", {}).get("services", []):       # check each service independently
-        name = svc["name"]                                              # short service name (no resource path prefix)
+        name = svc.get("name", "<unknown>")                                    # guard against malformed service dicts from the API
         if name not in allowlist:                                       # unknown service = potential rogue spend
             alerts.append({"check": "cloud_run_unknown", "service": name})  # include name for actionability
         if svc.get("min_instances", 0) > 0:                            # minScale > 0 means always-on = paid

@@ -51,6 +51,8 @@ def format_alert_message(alerts: list) -> str:                          # conver
                 f"  • MTD Spend: ₹{alert['mtd_cost_inr']:.0f} "
                 f"(limit ₹{alert['limit']:.0f})"
             )                                                           # INR to nearest rupee
+        else:                                                           # defensive fallback for any undocumented check key
+            lines.append(f"  • Unknown check: {check} — {alert}")     # surfaces new alert types that lack a formatter branch
     return "\n".join(lines)                                             # single string; Slack renders \n as line breaks
 
 

@@ -126,7 +126,7 @@ from notify import format_alert_message, post_to_slack                  # format
 from unittest.mock import patch, MagicMock                              # mock requests.post to avoid real network calls
 
 
-def test_format_alert_message_contains_key_fields(healthy_readings):    # pytest fixture injected — fresh dict per test
+def test_format_alert_message_contains_key_fields():                    # no fixture needed — alert dicts are constructed inline
     """Formatted message includes recognisable content for each alert type."""
     alerts = [
         {"check": "registry_versions", "pkg": "bike-demand-api", "count": 20, "limit": 15},
@@ -140,7 +140,7 @@ def test_format_alert_message_contains_key_fields(healthy_readings):    # pytest
     assert "🚨" in msg                                                  # header emoji must appear
 
 
-def test_post_to_slack_returns_true_on_200(healthy_readings):           # fixture injected (unused here but consistent signature)
+def test_post_to_slack_returns_true_on_200():                           # no fixture needed — only mocks are used
     """post_to_slack returns True when webhook responds with HTTP 200."""
     with patch("notify.requests.post") as mock_post:                    # intercept the requests.post call
         mock_response = MagicMock()                                     # create a fake response object
@@ -150,7 +150,7 @@ def test_post_to_slack_returns_true_on_200(healthy_readings):           # fixtur
     assert result is True                                               # 200 → True
 
 
-def test_post_to_slack_returns_false_on_non_200(healthy_readings):      # fixture injected (unused but consistent)
+def test_post_to_slack_returns_false_on_non_200():                      # no fixture needed — only mocks are used
     """post_to_slack returns False when webhook returns a non-200 status."""
     with patch("notify.requests.post") as mock_post:
         mock_response = MagicMock()
@@ -160,7 +160,7 @@ def test_post_to_slack_returns_false_on_non_200(healthy_readings):      # fixtur
     assert result is False                                              # non-200 → False
 
 
-def test_post_to_slack_returns_false_on_network_error(healthy_readings):  # fixture injected (unused but consistent)
+def test_post_to_slack_returns_false_on_network_error():                # no fixture needed — only mocks are used
     """post_to_slack returns False (not raises) when a network error occurs."""
     import requests as req                                              # real requests module — used only for the exception class
     with patch("notify.requests.post", side_effect=req.ConnectionError("timeout")):

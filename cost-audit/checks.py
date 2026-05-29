@@ -38,7 +38,7 @@ def check_artifact_registry(project: str, location: str, repo: str) -> dict:
         img_path = img.name.split("/dockerImages/")[-1]                # strip the resource prefix, keep "image@sha256:..."
         pkg_name = img_path.split("@")[0]                              # package name is the part before the digest separator
         pkg_versions[pkg_name] = pkg_versions.get(pkg_name, 0) + 1    # increment version count for this package
-        total_bytes += img.image_size_bytes                             # accumulate compressed image size in bytes
+        total_bytes += img.image_size_bytes or 0                         # guard: None for images being pushed or partially deleted
 
     total_gb = total_bytes / 1_000_000_000                             # convert bytes to GB (decimal, not binary)
     logger.info(f"Registry: {sum(pkg_versions.values())} images, {total_gb:.2f} GB")

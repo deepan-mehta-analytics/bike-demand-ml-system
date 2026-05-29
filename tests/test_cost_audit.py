@@ -169,7 +169,6 @@ def test_post_to_slack_returns_false_on_network_error():                # no fix
 
 
 # ── checks.py tests ────────────────────────────────────────────────────────────
-from unittest.mock import patch, MagicMock                              # standard mocking — already imported above; re-import is fine
 from checks import (                                                    # all seven check functions under test
     check_artifact_registry,
     check_compute,
@@ -218,6 +217,29 @@ def test_check_compute_returns_running_vm_names():
 
     assert "stray-vm" in result["running_vms"]                         # running VM must appear
     assert "stopped-vm" not in result["running_vms"]                   # stopped VM must NOT appear
+
+
+def test_check_compute_skips_empty_zone_groups():
+    """check_compute handles zone groups with no instances without crashing."""
+    empty_zone_group = MagicMock()                                     # simulate a zone group that has no VMs
+    empty_zone_group.instances = []                                    # empty list — the guard `if instances_in_zone.instances` must handle this
+
+    fake_running = MagicMock()                                         # a running VM in a different zone
+    fake_running.name = "running-vm"
+    fake_running.status = "RUNNING"
+
+    non_empty_group = MagicMock()                                      # a zone group that contains one VM
+    non_empty_group.instances = [fake_running]
+
+    with patch("checks.compute_v1.InstancesClient") as MockClient:
+        MockClient.return_value.aggregated_list.return_value = [
+            ("zones/us-east1-a", empty_zone_group),                    # empty zone — should be skipped cleanly
+            ("zones/us-central1-a", non_empty_group),                  # zone with VM — should be counted
+        ]
+        result = check_compute("proj")
+
+    assert "running-vm" in result["running_vms"]                       # VM from non-empty zone must appear
+    assert len(result["running_vms"]) == 1                             # empty zone must not contribute phantom entries
 
 
 def test_check_vertex_returns_endpoint_list():

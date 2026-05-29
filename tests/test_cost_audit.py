@@ -333,3 +333,78 @@ def test_check_cloud_run_extracts_name_and_min_instances():
 
     assert result["services"][0]["name"] == "gbfs-poller"              # resource path stripped to short name
     assert result["services"][0]["min_instances"] == 0                 # scale-to-zero confirmed
+
+
+# ── main.py integration tests ─────────────────────────────────────────────────
+import importlib                                                        # used to reload main module after env var changes
+
+
+def _healthy_check_readings():                                          # helper — NOT a pytest fixture, used only in integration tests
+    """Return a complete readings dict where every check is within threshold."""
+    return {                                                            # mirrors healthy_readings fixture but standalone for main.py tests
+        "registry":  {"pkg_versions": {}, "total_gb": 1.0},           # no packages over limit; 1 GB total
+        "compute":   {"running_vms": []},                              # no running VMs
+        "vertex":    {"endpoints": []},                                 # no Vertex endpoints
+        "bigquery":  {"total_gb": 0.5},                                # well under 8 GB limit
+        "spend":     {"mtd_cost_inr": 100.0},                          # well under ₹500 limit
+        "gcs":       {"bucket_sizes": {}},                             # no buckets over limit
+        "cloud_run": {"services": [{"name": "bike-demand-api", "min_instances": 0}]},  # one approved service at scale-to-zero
+    }
+
+
+def test_audit_handler_silent_when_all_healthy():
+    """Handler returns 200 and does NOT call Slack when all checks are healthy."""
+    healthy = _healthy_check_readings()                                 # all readings within thresholds
+
+    with patch("main.check_artifact_registry", return_value=healthy["registry"]), \
+         patch("main.check_compute",           return_value=healthy["compute"]), \
+         patch("main.check_vertex",            return_value=healthy["vertex"]), \
+         patch("main.check_bigquery",          return_value=healthy["bigquery"]), \
+         patch("main.check_spend_mtd",         return_value=healthy["spend"]), \
+         patch("main.check_gcs",               return_value=healthy["gcs"]), \
+         patch("main.check_cloud_run",         return_value=healthy["cloud_run"]), \
+         patch("main.post_to_slack")           as mock_slack:          # Slack must never be called on a healthy day
+        import main as audit_main                                       # import after patches are in place
+        fake_request = MagicMock()                                      # functions-framework passes a Flask Request object
+        body, status = audit_main.audit(fake_request)
+
+    assert status == 200                                                # always 200
+    assert "healthy" in body                                            # response body confirms healthy state
+    mock_slack.assert_not_called()                                      # core contract: no Slack POST on a healthy day
+
+
+def test_audit_handler_calls_slack_when_threshold_tripped(monkeypatch):
+    """Handler calls post_to_slack exactly once when at least one threshold is breached."""
+    import sys                                                          # needed to inject a fake secretmanager into sys.modules
+
+    monkeypatch.setenv("DRY_RUN", "false")                             # ensure DRY_RUN is not active for this test
+
+    tripped = _healthy_check_readings()                                 # start from healthy baseline
+    tripped["registry"]["pkg_versions"]["bike-demand-api"] = 20        # 20 versions > limit of 15 — trips an alert
+
+    fake_sm_response = MagicMock()                                      # fake Secret Manager response
+    fake_sm_response.payload.data = b"https://hooks.slack.com/fake"   # fake webhook URL bytes stored in the secret
+
+    mock_sm_module = MagicMock()                                        # fake google.cloud.secretmanager module
+    mock_sm_module.SecretManagerServiceClient.return_value \
+        .access_secret_version.return_value = fake_sm_response         # wire the fake client method to return the fake response
+
+    import main as audit_main                                           # import module reference for reload and patching
+    importlib.reload(audit_main)                                        # reload to pick up the monkeypatched DRY_RUN env var
+
+    # Inject fake secretmanager into sys.modules so the local import inside audit() picks it up
+    monkeypatch.setitem(sys.modules, "google.cloud.secretmanager", mock_sm_module)  # intercept the local import
+
+    with patch("main.check_artifact_registry", return_value=tripped["registry"]), \
+         patch("main.check_compute",           return_value=tripped["compute"]), \
+         patch("main.check_vertex",            return_value=tripped["vertex"]), \
+         patch("main.check_bigquery",          return_value=tripped["bigquery"]), \
+         patch("main.check_spend_mtd",         return_value=tripped["spend"]), \
+         patch("main.check_gcs",               return_value=tripped["gcs"]), \
+         patch("main.check_cloud_run",         return_value=tripped["cloud_run"]), \
+         patch("main.post_to_slack")           as mock_slack:          # intercept Slack delivery
+        mock_slack.return_value = True                                  # simulate Slack accepting the message
+        body, status = audit_main.audit(MagicMock())
+
+    assert status == 200                                                # always 200
+    mock_slack.assert_called_once()                                     # exactly one Slack POST when a threshold trips

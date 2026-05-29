@@ -77,8 +77,8 @@ def test_bigquery_size_trips_alert(healthy_readings):                   # pytest
 # ── GCS check ──────────────────────────────────────────────────────────────────
 
 def test_gcs_bucket_size_trips_alert(healthy_readings):                 # pytest injects the fixture dict
-    """Alert fires when any GCS bucket exceeds 4 GB."""
-    healthy_readings["gcs"]["bucket_sizes"]["bike-demand-staging"] = 4.1  # just over the 4 GB limit
+    """Alert fires when any GCS bucket exceeds 25 GB (MLflow artifact accumulation guard)."""
+    healthy_readings["gcs"]["bucket_sizes"]["bike-demand-staging"] = 25.1  # just over the 25 GB limit; normal healthy size is ~12 GB
     alerts = evaluate_thresholds(healthy_readings)                      # fixture value mutated then evaluated
     assert any(a["check"] == "gcs_bucket" for a in alerts)
 
@@ -141,30 +141,32 @@ def test_format_alert_message_contains_key_fields():                    # no fix
 
 
 def test_post_to_slack_returns_true_on_200():                           # no fixture needed — only mocks are used
-    """post_to_slack returns True when webhook responds with HTTP 200."""
-    with patch("notify.requests.post") as mock_post:                    # intercept the requests.post call
+    """post_to_slack returns True when Slack API responds with HTTP 200 and ok=true."""
+    with patch("notify.requests.post") as mock_post:                    # intercept the requests.post call to chat.postMessage
         mock_response = MagicMock()                                     # create a fake response object
-        mock_response.status_code = 200                                 # simulate Slack accepting the message
-        mock_post.return_value = mock_response                          # patch returns the fake response
-        result = post_to_slack("test message", "https://hooks.slack.com/fake")
-    assert result is True                                               # 200 → True
+        mock_response.status_code = 200                                 # simulate HTTP 200
+        mock_response.json.return_value = {"ok": True}                  # Slack Web API signals success via ok=true in JSON body
+        mock_post.return_value = mock_response
+        result = post_to_slack("test message", "xoxb-fake-token")       # bot token replaces webhook URL
+    assert result is True                                               # 200 + ok=true → True
 
 
-def test_post_to_slack_returns_false_on_non_200():                      # no fixture needed — only mocks are used
-    """post_to_slack returns False when webhook returns a non-200 status."""
+def test_post_to_slack_returns_false_on_slack_error():                  # no fixture needed — only mocks are used
+    """post_to_slack returns False when Slack returns ok=false (e.g. invalid token)."""
     with patch("notify.requests.post") as mock_post:
         mock_response = MagicMock()
-        mock_response.status_code = 400                                 # simulate Slack rejecting the message
+        mock_response.status_code = 200                                 # HTTP 200 but Slack signals failure in body
+        mock_response.json.return_value = {"ok": False, "error": "invalid_auth"}
         mock_post.return_value = mock_response
-        result = post_to_slack("test message", "https://hooks.slack.com/fake")
-    assert result is False                                              # non-200 → False
+        result = post_to_slack("test message", "xoxb-fake-token")
+    assert result is False                                              # ok=false → False even with HTTP 200
 
 
 def test_post_to_slack_returns_false_on_network_error():                # no fixture needed — only mocks are used
     """post_to_slack returns False (not raises) when a network error occurs."""
     import requests as req                                              # real requests module — used only for the exception class
     with patch("notify.requests.post", side_effect=req.ConnectionError("timeout")):
-        result = post_to_slack("test message", "https://hooks.slack.com/fake")
+        result = post_to_slack("test message", "xoxb-fake-token")
     assert result is False                                              # network error → False, never an exception
 
 

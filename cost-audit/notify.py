@@ -58,14 +58,21 @@ def format_alert_message(alerts: list) -> str:                          # conver
 
 # ── Slack Delivery ────────────────────────────────────────────────────────────
 
-def post_to_slack(message: str, webhook_url: str) -> bool:              # posts to Slack incoming webhook; non-fatal on failure
-    """POST message to Slack. Returns True on HTTP 200, False otherwise."""
+SLACK_CHANNEL = "#gcp-alerts"                                           # channel the bot posts cost-audit alerts to
+
+def post_to_slack(message: str, bot_token: str) -> bool:                # posts via Slack Web API chat.postMessage; non-fatal on failure
+    """POST message to Slack using a bot token. Returns True on success, False otherwise."""
     try:
-        resp = requests.post(                                           # Slack incoming webhook expects JSON with a 'text' key
-            webhook_url,
-            json={"text": message},                                     # message body; Slack renders markdown in 'text'
+        resp = requests.post(                                           # Slack Web API endpoint — works with any bot token
+            "https://slack.com/api/chat.postMessage",
+            headers={"Authorization": f"Bearer {bot_token}"},          # bot token stored in Secret Manager (xoxb-...)
+            json={                                                      # payload for chat.postMessage
+                "channel": SLACK_CHANNEL,                              # target channel; bot must be invited to it
+                "text": message,                                        # message body; Slack renders *bold* and `code` markdown
+            },
             timeout=10,                                                 # 10-second timeout; network errors are non-fatal
         )
-        return resp.status_code == 200                                  # Slack returns HTTP 200 + body "ok" on success
+        data = resp.json()                                              # Slack always returns JSON even on failure
+        return resp.status_code == 200 and data.get("ok") is True      # Slack sets ok=true on success, ok=false with error key on failure
     except requests.RequestException:                                   # covers ConnectionError, Timeout, etc.
         return False                                                    # failure is logged by caller; never raises here

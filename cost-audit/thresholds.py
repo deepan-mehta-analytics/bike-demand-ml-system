@@ -6,7 +6,7 @@ THRESHOLDS = {                                                          # single
     "compute_max_running_vms": 0,                                       # alert on ANY running VM (expected = 0 in steady state)
     "vertex_max_endpoints": 0,                                          # alert on ANY Vertex endpoint (no free tier for endpoints)
     "bigquery_max_total_gb": 8.0,                                       # alert at 8 GB (free 10 GB storage)
-    "gcs_max_bucket_gb": 4.0,                                           # alert at 4 GB per bucket (free 5 GB total)
+    "gcs_max_bucket_gb": 25.0,                                          # alert at 25 GB; bike-demand-staging holds MLflow artifacts (~12 GB normal; 21-day lifecycle caps at ~30 GB max; alert fires if lifecycle fails or accumulation runs away
     "cloud_run_allowlist": frozenset({                                  # immutable set — prevents accidental runtime mutation
         "bike-demand-api",                                              # inference API
         "gbfs-poller",                                                  # GBFS station poller

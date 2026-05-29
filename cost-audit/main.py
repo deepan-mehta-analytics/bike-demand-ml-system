@@ -71,15 +71,15 @@ def audit(request):
         logger.info(f"DRY_RUN=true — would post:\n{message}")          # full payload visible in Cloud Logging for inspection
         return (f"DRY_RUN payload:\n{message}", 200)                   # 200 so Scheduler does not retry
 
-    # ── Fetch webhook URL from Secret Manager ─────────────────────────────────
+    # ── Fetch bot token from Secret Manager ──────────────────────────────────
     from google.cloud import secretmanager                              # imported here to keep module load lightweight
     sm = secretmanager.SecretManagerServiceClient()                     # uses ADC automatically — SA must have secretAccessor role
     secret_name = f"projects/{PROJECT}/secrets/{SLACK_SECRET}/versions/latest"
     response = sm.access_secret_version(request={"name": secret_name}) # single read; well within 10k/month free tier
-    webhook_url = response.payload.data.decode("utf-8").strip()        # strip trailing whitespace and newlines from the secret value
+    bot_token = response.payload.data.decode("utf-8").strip()          # strip trailing whitespace/newlines from the xoxb-... token
 
-    ok = post_to_slack(message, webhook_url)                           # POST to Slack; returns bool; non-fatal on failure
+    ok = post_to_slack(message, bot_token)                             # POST to #gcp-alerts via chat.postMessage; non-fatal on failure
     if not ok:
-        logger.error("Slack POST failed — check webhook URL in Secret Manager")  # log for debugging; do not raise
+        logger.error("Slack POST failed — check bot token in Secret Manager")  # log for debugging; do not raise
 
     return ("OK — alerts dispatched", 200)                             # always 200; Scheduler must not retry on delivery failure

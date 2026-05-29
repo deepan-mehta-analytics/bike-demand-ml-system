@@ -430,7 +430,7 @@ python models/train.py
 pytest tests/
 ```
 
-The suite has seven modules (40 tests) across three tiers:
+The suite has eight modules (66 tests) across three tiers — 40 for the ML inference API and 26 for the `cost-audit` service:
 
 | Module | Type | What it covers |
 |---|---|---|
@@ -441,6 +441,7 @@ The suite has seven modules (40 tests) across three tiers:
 | `tests/test_pipeline.py` | Unit + Pipeline | Legacy Dataflow path: GBFS/TFL snapshot schema, ParseMessage DoFn, DirectRunner end-to-end; auto-skipped unless `requirements-pipeline.txt` is installed |
 | `tests/test_window_agg.py` | Unit | v3.1.0 poller: 5-minute window aggregator — empty input, single snapshot degenerate stats, multi-snapshot avg/min/max, multi-city/station keying, 2-decimal rounding parity with the Dataflow path |
 | `tests/test_gbfs_poller_service.py` | Unit | v3.1.0 poller: FastAPI service contract — health endpoint, poller trigger response shape |
+| `tests/test_cost_audit.py` | Unit + Integration | `cost-audit` service: `evaluate_thresholds` (11 tests across 9 check domains), `format_alert_message` + `post_to_slack` (4 tests), 7 resource-reading functions with mocked GCP clients (9 tests), `audit()` HTTP handler integration (2 tests — healthy silent, tripped Slack call) |
 
 ```bash
 # Fast suite (schema, API, routing — excludes RMSE gates)

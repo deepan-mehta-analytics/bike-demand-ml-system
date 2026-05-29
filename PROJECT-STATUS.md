@@ -71,7 +71,7 @@ Both repos form a single portfolio system. Track them together here.
 
 ### Infrastructure (containerisation + CI)
 * `requirements.txt` — 12 packages pinned (FastAPI / uvicorn / scikit-learn / pandas / joblib / pydantic / pytest / httpx / ruff / anyio / requests / prometheus-fastapi-instrumentator); `pytest.ini` — `pythonpath = .`
-* 40 tests: 10 unit (features incl. frozen-set guard) + 6 API integration (incl. city default) + 6 RMSE gates (`-m slow`) + 5 routing + 5 Dataflow pipeline (GBFS/TFL/ParseMessage/DirectRunner; auto-skipped in CI) + 5 v3.1.0 window_agg (5-min aggregator) + 3 v3.1.0 gbfs_poller_service (FastAPI contract)
+* 66 tests: 40 ML inference API (10 unit + 6 API integration + 6 RMSE gates + 5 routing + 5 Dataflow pipeline + 5 window_agg + 3 gbfs_poller_service) + 26 cost-audit service (11 evaluate_thresholds + 4 notify + 9 check functions + 2 handler integration)
 * `Dockerfile` — `python:3.11-slim`, non-root `appuser`, stdlib health check; inline comments moved to standalone lines (Docker parse fix, commit `1ae284f`)
 * `docker-compose.yml` — fastapi service, port 8000, `USE_PUBSUB=false`; volume mount removed (artifacts baked into image)
 * `.github/workflows/ci.yml` — 7 jobs: `lint` (ruff), `test` (pytest fast — trains Seoul model as fixture), `docker` (image build), `publish` (push to GHCR), `publish-gar` (push to GAR + redeploy Cloud Run on merge to main), `build-training-container` (push Vertex AI training image to GAR), `accuracy` (RMSE gates across all 6 cities, push to main only); all jobs green on the latest push

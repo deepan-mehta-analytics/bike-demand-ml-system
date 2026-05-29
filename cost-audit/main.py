@@ -33,8 +33,8 @@ DRY_RUN = os.environ.get("DRY_RUN", "").lower() == "true"             # when tru
 def audit(request):
     """Daily cost audit handler. Invoked by Cloud Scheduler once per day.
 
-    Runs all resource checks, evaluates against thresholds, and posts to Slack
-    only if at least one threshold is breached. Always returns HTTP 200 so
+    Runs all resource checks, evaluates against thresholds, and sends an email
+    alert only if at least one threshold is breached. Always returns HTTP 200 so
     Cloud Scheduler does not retry on application-level outcomes.
     """
     logger.info("Cost audit starting")                                  # log the start so Cloud Logging captures execution time

@@ -136,33 +136,31 @@ def test_format_alert_message_contains_key_fields():                    # no fix
     msg = format_alert_message(alerts)                                  # call formatter with mixed alert types
     assert "bike-demand-api" in msg                                     # registry package name must appear
     assert "instance-old" in msg                                        # VM name must appear
-    assert "600" in msg                                                 # spend amount must appear (no emoji in email format)
+    assert "600" in msg                                                 # spend amount must appear
     assert "Thresholds Tripped" in msg                                  # header line must appear
 
 
 def test_send_alert_returns_true_on_success():                          # no fixture needed — only mocks are used
-    """send_alert returns True when email is delivered without SMTP error."""
-    with patch("notify.smtplib.SMTP") as mock_smtp_cls:                 # mock the SMTP constructor so no real connection is made
-        mock_server = MagicMock()                                       # fake SMTP server instance
-        mock_smtp_cls.return_value.__enter__ = lambda s: mock_server    # support `with smtplib.SMTP(...) as server:`
-        mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
-        result = send_alert("test message", "a@live.com", "a@live.com", "fake-password")
-    assert result is True                                               # no exception → True
+    """send_alert returns True when Slack webhook responds 200."""
+    with patch("notify.requests.post") as mock_post:                    # mock the HTTP POST so no real Slack call is made
+        mock_post.return_value = MagicMock(status_code=200)             # Slack returns 200 on a successful post
+        result = send_alert("test message", "https://hooks.slack.com/services/T/B/x")
+    assert result is True                                               # 200 → True
 
 
-def test_send_alert_returns_false_on_auth_failure():                    # no fixture needed — only mocks are used
-    """send_alert returns False when SMTP raises an exception (e.g. bad password)."""
-    with patch("notify.smtplib.SMTP") as mock_smtp_cls:
-        mock_smtp_cls.side_effect = Exception("authentication failed")  # simulate SMTP login rejection
-        result = send_alert("test message", "a@live.com", "a@live.com", "wrong-password")
-    assert result is False                                              # exception → False, never propagates
+def test_send_alert_returns_false_on_non_200():                         # no fixture needed — only mocks are used
+    """send_alert returns False when Slack responds with a non-200 status (e.g. bad webhook)."""
+    with patch("notify.requests.post") as mock_post:
+        mock_post.return_value = MagicMock(status_code=404)            # invalid/revoked webhook → 404
+        result = send_alert("test message", "https://hooks.slack.com/services/bad")
+    assert result is False                                              # non-200 → False
 
 
 def test_send_alert_returns_false_on_network_error():                   # no fixture needed — only mocks are used
-    """send_alert returns False (not raises) when network is unreachable."""
-    with patch("notify.smtplib.SMTP") as mock_smtp_cls:
-        mock_smtp_cls.side_effect = OSError("network unreachable")      # simulate connection failure
-        result = send_alert("test message", "a@live.com", "a@live.com", "fake-password")
+    """send_alert returns False (not raises) when the POST raises a network error."""
+    with patch("notify.requests.post") as mock_post:
+        mock_post.side_effect = OSError("network unreachable")         # simulate connection failure
+        result = send_alert("test message", "https://hooks.slack.com/services/T/B/x")
     assert result is False                                              # network error → False, never an exception
 
 
@@ -385,7 +383,7 @@ def test_audit_handler_sends_email_when_threshold_tripped(monkeypatch):
     tripped["registry"]["pkg_versions"]["bike-demand-api"] = 20        # 20 versions > limit of 15 — trips an alert
 
     fake_sm_response = MagicMock()                                      # fake Secret Manager response
-    fake_sm_response.payload.data = b"fake-app-password"              # fake Microsoft App Password bytes stored in the secret
+    fake_sm_response.payload.data = b"https://hooks.slack.com/services/T/B/x"  # fake Slack webhook URL bytes stored in the secret
 
     mock_sm_module = MagicMock()                                        # fake google.cloud.secretmanager module
     mock_sm_module.SecretManagerServiceClient.return_value \

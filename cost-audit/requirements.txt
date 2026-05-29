@@ -3,6 +3,6 @@ google-cloud-artifact-registry==1.21.0  # list Docker image versions and repo si
 google-cloud-compute==1.21.0            # list running Compute Engine VM instances
 google-cloud-bigquery==3.34.0          # query billing export + table storage metadata
 google-cloud-storage==2.18.2           # list GCS buckets and blob sizes
-google-cloud-secret-manager==2.23.0    # read email app password from Secret Manager at invocation time
+google-cloud-secret-manager==2.23.0    # read Slack webhook URL from Secret Manager at invocation time
 google-auth==2.38.0                    # ADC credential resolution for REST calls
 requests==2.32.3                       # HTTP client for Slack webhook POST and GCP REST APIs

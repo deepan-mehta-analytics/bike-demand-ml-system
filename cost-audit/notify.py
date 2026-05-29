@@ -1,19 +1,12 @@
 # ── Imports ───────────────────────────────────────────────────────────────────
-import smtplib                                                          # stdlib SMTP client — no extra dep needed
-from email.mime.text import MIMEText                                    # builds plain-text email body
-from email.mime.multipart import MIMEMultipart                          # wraps subject + body into one message object
-
-
-# ── Email config ──────────────────────────────────────────────────────────────
-SMTP_HOST = "smtp-mail.outlook.com"                                     # Microsoft/Outlook SMTP server
-SMTP_PORT = 587                                                         # STARTTLS port
+import requests                                                        # HTTP client for the Slack incoming-webhook POST
 
 
 # ── Message Formatter ─────────────────────────────────────────────────────────
 
 def format_alert_message(alerts: list) -> str:                          # converts alert dicts to a single human-readable string
-    """Format a list of alert dicts into a plain-text alert message."""
-    lines = ["GCP Cost Audit - Thresholds Tripped"]                    # email-safe header (no emoji — avoids MIME encoding issues)
+    """Format a list of alert dicts into a single Slack-ready text string."""
+    lines = ["*GCP Cost Audit — Thresholds Tripped*"]                   # Slack mrkdwn bold header (*..* renders bold)
     for alert in alerts:                                                # one bullet per alert dict
         check = alert["check"]                                          # discriminator key that selects the right message template
         if check == "registry_versions":
@@ -63,21 +56,16 @@ def format_alert_message(alerts: list) -> str:                          # conver
     return "\n".join(lines)                                             # single string; Slack renders \n as line breaks
 
 
-# ── Email Delivery ───────────────────────────────────────────────────────────
+# ── Slack Delivery ─────────────────────────────────────────────────────────────
 
-def send_alert(message: str, from_addr: str, to_addr: str, app_password: str) -> bool:
-    """Send alert email via Outlook SMTP. Returns True on success, False otherwise."""
+def send_alert(message: str, webhook_url: str) -> bool:                 # posts the formatted message to a Slack incoming webhook
+    """Post alert message to a Slack incoming webhook. Returns True on success, False otherwise."""
     try:
-        msg = MIMEMultipart()                                           # container for headers + body
-        msg["From"] = from_addr                                         # sender address (same as login for Outlook)
-        msg["To"] = to_addr                                             # recipient — typically the same address
-        msg["Subject"] = "GCP Cost Audit — Thresholds Tripped"         # plain ASCII subject avoids MIME encoding edge cases
-        msg.attach(MIMEText(message, "plain"))                          # attach body as plain text
-
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:             # open connection to Outlook SMTP
-            server.starttls()                                           # upgrade to TLS before sending credentials
-            server.login(from_addr, app_password)                      # authenticate with the Microsoft App Password
-            server.send_message(msg)                                    # deliver the email
-        return True                                                     # no exception = delivery accepted by SMTP server
-    except Exception:                                                   # catches SMTP errors, auth failures, network issues
+        resp = requests.post(                                           # Slack incoming webhooks accept a simple JSON body
+            webhook_url,                                                # the https://hooks.slack.com/services/... URL from Secret Manager
+            json={"text": message},                                     # {"text": ...} is the minimal Slack webhook payload
+            timeout=10,                                                 # short timeout — never block the audit on a slow Slack
+        )
+        return resp.status_code == 200                                  # Slack returns 200 + body "ok" on success
+    except Exception:                                                   # network errors, timeouts, malformed URL, etc.
         return False                                                    # failure is logged by caller; never raises here

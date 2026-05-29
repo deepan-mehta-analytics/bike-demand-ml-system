@@ -13,8 +13,8 @@ jobs:
     name: Ruff lint
     runs-on: ubuntu-latest                       # standard GitHub-hosted runner
     steps:
-      - uses: actions/checkout@v4                # check out source
-      - uses: actions/setup-python@v5            # provision Python
+      - uses: actions/checkout@v6                # check out source
+      - uses: actions/setup-python@v6            # provision Python
         with:
           python-version: "3.11"                 # match Dockerfile base image version
       - run: pip install ruff==0.15.12           # install pinned linter only — no full requirements needed
@@ -26,8 +26,8 @@ jobs:
     runs-on: ubuntu-latest                       # standard runner
     needs: lint                                  # skip tests if lint fails
     steps:
-      - uses: actions/checkout@v4                # check out source
-      - uses: actions/setup-python@v5            # provision Python
+      - uses: actions/checkout@v6                # check out source
+      - uses: actions/setup-python@v6            # provision Python
         with:
           python-version: "3.11"                 # consistent Python version across all jobs
       - run: pip install -r requirements.txt     # install all pinned project dependencies
@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest                       # standard runner
     needs: test                                  # only build image if tests pass
     steps:
-      - uses: actions/checkout@v4                # check out source
+      - uses: actions/checkout@v6                # check out source
       - run: docker build -t bike-demand-ml-system:ci .  # build image; trains all 4 city models during build
 
   # Job 4: Publish to GitHub Container Registry (GHCR)
@@ -55,13 +55,13 @@ jobs:
       contents: read                             # read repo source
       packages: write                            # push image to GHCR
     steps:
-      - uses: actions/checkout@v4                # check out source
-      - uses: docker/login-action@v3             # authenticate with GHCR using auto-injected token
+      - uses: actions/checkout@v6                # check out source
+      - uses: docker/login-action@v4             # authenticate with GHCR using auto-injected token
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v5        # build and push in a single step
+      - uses: docker/build-push-action@v7        # build and push in a single step
         with:
           context: .
           push: true
@@ -78,13 +78,13 @@ jobs:
     needs: docker                                # only publish if docker build passes
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4                # check out source
-      - uses: google-github-actions/auth@v2      # authenticate to GCP using service account key
+      - uses: actions/checkout@v6                # check out source
+      - uses: google-github-actions/auth@v3      # authenticate to GCP using service account key
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-      - uses: google-github-actions/setup-gcloud@v2  # install gcloud SDK on runner
+      - uses: google-github-actions/setup-gcloud@v3  # install gcloud SDK on runner
       - run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet  # configure Docker credential helper for GAR
-      - uses: docker/build-push-action@v5        # build and push image to GAR
+      - uses: docker/build-push-action@v7        # build and push image to GAR
         with:
           context: .
           push: true
@@ -112,13 +112,13 @@ jobs:
     needs: docker                                 # only build if inference docker build passes
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4                 # check out source
-      - uses: google-github-actions/auth@v2       # authenticate to GCP using service account key
+      - uses: actions/checkout@v6                 # check out source
+      - uses: google-github-actions/auth@v3       # authenticate to GCP using service account key
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-      - uses: google-github-actions/setup-gcloud@v2  # install gcloud SDK on runner
+      - uses: google-github-actions/setup-gcloud@v3  # install gcloud SDK on runner
       - run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet  # configure Docker credential helper for GAR
-      - uses: docker/build-push-action@v5         # build and push training image to GAR
+      - uses: docker/build-push-action@v7         # build and push training image to GAR
         with:
           context: .
           file: Dockerfile.training               # use the training-specific Dockerfile
@@ -138,8 +138,8 @@ jobs:
     needs: lint                                   # parallel to test job; skip only if lint fails
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4                 # check out source and committed city CSVs
-      - uses: actions/setup-python@v5             # provision Python
+      - uses: actions/checkout@v6                 # check out source and committed city CSVs
+      - uses: actions/setup-python@v6             # provision Python
         with:
           python-version: "3.11"                  # match all other jobs
       - run: pip install -r requirements.txt      # install sklearn, pandas, joblib, pytest

@@ -1,8 +1,8 @@
 # ── Threshold Configuration ────────────────────────────────────────────────────
 
 THRESHOLDS = {                                                          # single source of truth for all cost-safety limits
-    "registry_max_versions_per_pkg": 20,                                # alert when any Docker package exceeds this version count; 20 = 4-day cleanup window × ~5 pushes/day headroom
-    "registry_max_total_gb": 15.0,                                      # alert when repo total size exceeds 15 GB; natural baseline is ~11 GB (4 packages incl. training images); 15 GB gives 35% buffer
+    "registry_max_versions_per_pkg": 15,                                # alert when any Docker package exceeds this version count; 15 = spec-locked limit; cleanup policy keeps ≤5 after 4-day window
+    "registry_max_total_gb": 9.0,                                       # alert when repo total size exceeds 9 GB; steady-state post-cleanup target is ~4-5 GB; 9 GB gives early warning before the 10 GB cost cliff
     "compute_max_running_vms": 0,                                       # alert on ANY running VM (expected = 0 in steady state)
     "vertex_max_endpoints": 0,                                          # alert on ANY Vertex endpoint (no free tier for endpoints)
     "bigquery_max_total_gb": 8.0,                                       # alert at 8 GB (free 10 GB storage)

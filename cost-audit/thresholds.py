@@ -1,20 +1,18 @@
 # ── Threshold Configuration ────────────────────────────────────────────────────
 
 THRESHOLDS = {                                                          # single source of truth for all cost-safety limits
-    "registry_max_versions_per_pkg": 15,                                # alert when any Docker package exceeds this version count; 15 = spec-locked limit; cleanup policy keeps ≤5 after 4-day window
-    "registry_max_total_gb": 9.0,                                       # alert when repo total size exceeds 9 GB; steady-state post-cleanup target is ~4-5 GB; 9 GB gives early warning before the 10 GB cost cliff
+    "registry_max_versions_per_pkg": 7,                                 # alert when any package exceeds 7 versions; cleanup policy keeps ≤5 after 4-day window; 7 gives one CI-day buffer
+    "registry_max_total_gb": 3.0,                                       # portfolio-mode target: 2 active packages × 5 images × ~250 MB = ~2.5 GB; 3 GB gives CI-day headroom
     "compute_max_running_vms": 0,                                       # alert on ANY running VM (expected = 0 in steady state)
     "vertex_max_endpoints": 0,                                          # alert on ANY Vertex endpoint (no free tier for endpoints)
     "bigquery_max_total_gb": 8.0,                                       # alert at 8 GB (free 10 GB storage)
-    "gcs_max_bucket_gb": 25.0,                                          # alert at 25 GB; bike-demand-staging holds MLflow artifacts (~12 GB normal; 21-day lifecycle caps at ~30 GB max; alert fires if lifecycle fails or accumulation runs away
+    "gcs_max_bucket_gb": 5.0,                                           # portfolio mode: MLflow artifacts deleted; only CloudBuild temp files remain (~0 GB); 5 GB catches any unexpected accumulation
     "cloud_run_allowlist": frozenset({                                  # immutable set — prevents accidental runtime mutation
-        "bike-demand-api",                                              # inference API
-        "gbfs-poller",                                                  # GBFS station poller
-        "bike-demand-trigger",                                          # Vertex AI trigger
-        "billing-kill-switch",                                          # budget protection
-        "cost-audit",                                                   # this service
+        "bike-demand-api",                                              # inference API (portfolio demo endpoint)
+        "billing-kill-switch",                                          # budget protection (europe-west1)
+        "cost-audit",                                                   # this monitoring service
     }),
-    "spend_mtd_max_inr": 500.0,                                         # alert when month-to-date spend exceeds ₹500
+    "spend_mtd_max_inr": 300.0,                                         # portfolio-mode target: ~₹80-120/month expected; 300 gives safe headroom before escalation
 }
 
 

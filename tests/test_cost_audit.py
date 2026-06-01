@@ -16,11 +16,11 @@ def healthy_readings():                                                 # all re
         "gcs": {"bucket_sizes": {"bike-demand-staging": 0.5}},
         "cloud_run": {"services": [
             {"name": "bike-demand-api", "min_instances": 0},
-            {"name": "gbfs-poller", "min_instances": 0},
-            # NB: only 2 of 5 allowlisted services are present — the unknown-service
-            # test checks that unknown names trip an alert, not that known ones are present
+            {"name": "cost-audit", "min_instances": 0},
+            # NB: only 2 of 3 allowlisted services present — unknown-service test
+            # checks that unknown names trip an alert, not that known ones are present
         ]},
-        "spend": {"mtd_cost_inr": 200.0},
+        "spend": {"mtd_cost_inr": 100.0},
     }
 
 
@@ -36,13 +36,13 @@ def test_healthy_readings_produce_no_alerts(healthy_readings):          # pytest
 
 def test_registry_version_count_trips_alert(healthy_readings):          # pytest injects the fixture dict
     """Alert fires when a package has more versions than the limit."""
-    healthy_readings["registry"]["pkg_versions"]["bike-demand-api"] = 21  # one over the limit of 20
+    healthy_readings["registry"]["pkg_versions"]["bike-demand-api"] = 8   # one over the portfolio-mode limit of 7
     alerts = evaluate_thresholds(healthy_readings)                      # fixture value mutated then evaluated
     assert any(a["check"] == "registry_versions" for a in alerts)
 
 def test_registry_total_size_trips_alert(healthy_readings):             # pytest injects the fixture dict
-    """Alert fires when total repo size exceeds 10 GB."""
-    healthy_readings["registry"]["total_gb"] = 15.1                    # just over the 15 GB limit
+    """Alert fires when total repo size exceeds portfolio-mode 3 GB target."""
+    healthy_readings["registry"]["total_gb"] = 3.1                     # just over the 3 GB limit
     alerts = evaluate_thresholds(healthy_readings)                      # fixture value mutated then evaluated
     assert any(a["check"] == "registry_size" for a in alerts)
 
@@ -77,8 +77,8 @@ def test_bigquery_size_trips_alert(healthy_readings):                   # pytest
 # ── GCS check ──────────────────────────────────────────────────────────────────
 
 def test_gcs_bucket_size_trips_alert(healthy_readings):                 # pytest injects the fixture dict
-    """Alert fires when any GCS bucket exceeds 25 GB (MLflow artifact accumulation guard)."""
-    healthy_readings["gcs"]["bucket_sizes"]["bike-demand-staging"] = 25.1  # just over the 25 GB limit; normal healthy size is ~12 GB
+    """Alert fires when any GCS bucket exceeds 5 GB (portfolio-mode; MLflow artifacts deleted)."""
+    healthy_readings["gcs"]["bucket_sizes"]["bike-demand-staging"] = 5.1   # just over the 5 GB portfolio-mode limit
     alerts = evaluate_thresholds(healthy_readings)                      # fixture value mutated then evaluated
     assert any(a["check"] == "gcs_bucket" for a in alerts)
 
@@ -101,8 +101,8 @@ def test_always_on_cloud_run_service_trips_alert(healthy_readings):     # pytest
 # ── Spend check ────────────────────────────────────────────────────────────────
 
 def test_spend_mtd_trips_alert(healthy_readings):                       # pytest injects the fixture dict
-    """Alert fires when month-to-date spend exceeds ₹500."""
-    healthy_readings["spend"]["mtd_cost_inr"] = 501.0                  # just over the ₹500 limit
+    """Alert fires when month-to-date spend exceeds ₹300 (portfolio-mode limit)."""
+    healthy_readings["spend"]["mtd_cost_inr"] = 301.0                  # just over the ₹300 portfolio-mode limit
     alerts = evaluate_thresholds(healthy_readings)                      # fixture value mutated then evaluated
     assert any(a["check"] == "spend_mtd" for a in alerts)
 
@@ -112,7 +112,7 @@ def test_spend_mtd_trips_alert(healthy_readings):                       # pytest
 def test_multiple_thresholds_tripped_returns_all_alerts(healthy_readings):  # pytest injects the fixture dict
     """All breached thresholds are reported, not just the first."""
     healthy_readings["compute"]["running_vms"] = ["vm-a"]              # trip compute_vms threshold
-    healthy_readings["spend"]["mtd_cost_inr"] = 600.0                  # trip spend_mtd threshold
+    healthy_readings["spend"]["mtd_cost_inr"] = 400.0                  # trip spend_mtd threshold (>₹300 limit)
     alerts = evaluate_thresholds(healthy_readings)                      # evaluate with two breaches present
     for alert in alerts:                                                # verify every alert has minimum required fields
         assert "check" in alert, f"Alert missing 'check' key: {alert}" # check key identifies which threshold tripped
@@ -129,14 +129,14 @@ from unittest.mock import patch, MagicMock                              # mock s
 def test_format_alert_message_contains_key_fields():                    # no fixture needed — alert dicts are constructed inline
     """Formatted message includes recognisable content for each alert type."""
     alerts = [
-        {"check": "registry_versions", "pkg": "bike-demand-api", "count": 20, "limit": 15},
+        {"check": "registry_versions", "pkg": "bike-demand-api", "count": 8, "limit": 7},
         {"check": "compute_vms", "vms": ["instance-old"]},
-        {"check": "spend_mtd", "mtd_cost_inr": 600.0, "limit": 500.0},
+        {"check": "spend_mtd", "mtd_cost_inr": 400.0, "limit": 300.0},
     ]
     msg = format_alert_message(alerts)                                  # call formatter with mixed alert types
     assert "bike-demand-api" in msg                                     # registry package name must appear
     assert "instance-old" in msg                                        # VM name must appear
-    assert "600" in msg                                                 # spend amount must appear
+    assert "400" in msg                                                 # spend amount must appear
     assert "Thresholds Tripped" in msg                                  # header line must appear
 
 
@@ -315,7 +315,7 @@ def test_check_gcs_sums_blob_sizes_per_bucket():
 def test_check_cloud_run_extracts_name_and_min_instances():
     """check_cloud_run extracts short service names and minInstanceCount values."""
     fake_service = {                                                    # Cloud Run v2 service resource dict
-        "name": "projects/proj/locations/us-central1/services/gbfs-poller",
+        "name": "projects/proj/locations/us-central1/services/bike-demand-api",
         "scaling": {"minInstanceCount": 0},                            # scale-to-zero = healthy
     }
 
@@ -327,7 +327,7 @@ def test_check_cloud_run_extracts_name_and_min_instances():
         mock_get.return_value = mock_resp
         result = check_cloud_run("proj", "us-central1")
 
-    assert result["services"][0]["name"] == "gbfs-poller"              # resource path stripped to short name
+    assert result["services"][0]["name"] == "bike-demand-api"          # resource path stripped to short name
     assert result["services"][0]["min_instances"] == 0                 # scale-to-zero confirmed
 
 
@@ -342,7 +342,7 @@ def _healthy_check_readings():                                          # helper
         "compute":   {"running_vms": []},                              # no running VMs
         "vertex":    {"endpoints": []},                                 # no Vertex endpoints
         "bigquery":  {"total_gb": 0.5},                                # well under 8 GB limit
-        "spend":     {"mtd_cost_inr": 100.0},                          # well under ₹500 limit
+        "spend":     {"mtd_cost_inr": 100.0},                          # well under ₹300 portfolio-mode limit
         "gcs":       {"bucket_sizes": {}},                             # no buckets over limit
         "cloud_run": {"services": [{"name": "bike-demand-api", "min_instances": 0}]},  # one approved service at scale-to-zero
     }
@@ -380,7 +380,7 @@ def test_audit_handler_sends_email_when_threshold_tripped(monkeypatch):
     monkeypatch.setenv("DRY_RUN", "false")                             # ensure DRY_RUN is not active for this test
 
     tripped = _healthy_check_readings()                                 # start from healthy baseline
-    tripped["registry"]["pkg_versions"]["bike-demand-api"] = 21        # 21 versions > limit of 20 — trips an alert
+    tripped["registry"]["pkg_versions"]["bike-demand-api"] = 8         # 8 versions > portfolio-mode limit of 7 — trips an alert
 
     fake_sm_response = MagicMock()                                      # fake Secret Manager response
     fake_sm_response.payload.data = b"https://hooks.slack.com/services/T/B/x"  # fake Slack webhook URL bytes stored in the secret

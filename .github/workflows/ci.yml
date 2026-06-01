@@ -102,32 +102,7 @@ jobs:
             --project bike-demand-ml-system
         # redeploy Cloud Run service with the freshly built image on every merge to main
 
-  # Job 6: Build and publish the Vertex AI training container image to GAR
-  # Runs only on push to main; requires the same GCP_SA_KEY secret as Job 5.
-  # Pushed as bike-demand-training:latest and bike-demand-training:{sha} to GAR.
-  # The bike-demand-trigger Cloud Run service (vertex_trigger.py) pulls this image.
-  build-training-container:
-    name: Build training container
-    runs-on: ubuntu-latest                        # standard GitHub-hosted runner
-    needs: docker                                 # only build if inference docker build passes
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v6                 # check out source
-      - uses: google-github-actions/auth@v3       # authenticate to GCP using service account key
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-      - uses: google-github-actions/setup-gcloud@v3  # install gcloud SDK on runner
-      - run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet  # configure Docker credential helper for GAR
-      - uses: docker/build-push-action@v7         # build and push training image to GAR
-        with:
-          context: .
-          file: Dockerfile.training               # use the training-specific Dockerfile
-          push: true
-          tags: |
-            us-central1-docker.pkg.dev/bike-demand-ml-system/bike-demand-repo/bike-demand-training:latest
-            us-central1-docker.pkg.dev/bike-demand-ml-system/bike-demand-repo/bike-demand-training:${{ github.sha }}
-
-  # Job 7: RMSE accuracy gates
+  # Job 6: RMSE accuracy gates
   # Trains a fresh RF per city from committed processed CSVs; asserts RMSE < threshold.
   # Runs only on push to main (not PRs); parallel to the test job (both need only lint).
   # No GCP credentials required — pure pandas + sklearn from requirements.txt.

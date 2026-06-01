@@ -81,7 +81,7 @@ It implements:
 | ASGI Server | uvicorn | Production-grade ASGI server for FastAPI |
 | Containerisation | Docker + Docker Compose | python:3.11-slim image; all 6 city models baked into image at build time |
 | Testing | pytest + httpx + anyio | Schema guard, RMSE gates (6 cities), routing guarantee, async API tests |
-| Linting / CI | ruff + GitHub Actions | Lint → test → docker build → RMSE accuracy gates (Job 7) on push to main |
+| Linting / CI | ruff + GitHub Actions | Lint → test → docker build → RMSE accuracy gates (Job 6) on push to main |
 | Experiment Tracking | MLflow *(v4.0.0)* | GCS-backed run tracking, model registry, RMSE gate |
 | ML Platform | Vertex AI *(v4.0.0)* | Managed CustomJob for weekly hyperparameter sweep |
 
@@ -176,7 +176,7 @@ bike-demand-ml-system/
 │   ├── conftest.py                     ← anyio asyncio backend fixture for async tests
 │   ├── test_features.py                ← unit tests: temporal extraction, one-hot, frozen schema guard
 │   ├── test_api.py                     ← integration tests: 200/422 via httpx.AsyncClient
-│   ├── test_model_accuracy.py          ← RMSE gate tests: per-city accuracy assertions (slow, CI Job 7)
+│   ├── test_model_accuracy.py          ← RMSE gate tests: per-city accuracy assertions (slow, CI Job 6)
 │   ├── test_routing.py                 ← routing tests: no-fallback guarantee for Paris/Chicago/NYC/DC
 │   ├── test_pipeline.py                ← Dataflow pipeline tests: DoFn unit + DirectRunner end-to-end (needs requirements-pipeline.txt)
 │   ├── test_window_agg.py              ← v3.1.0 poller: 5-min window aggregator unit tests (avg/min/max, multi-city, rounding)
@@ -438,7 +438,7 @@ The suite has eight modules (66 tests) across three tiers — 40 for the ML infe
 | `tests/test_features.py` | Unit | Temporal extraction, one-hot encoding, frozen schema guard (`test_feature_schema_is_frozen` — fails with retrain instructions if the column set changes) |
 | `tests/test_api.py` | Integration | `httpx.AsyncClient` against the live ASGI app: 200 for single record, 200 for batch, 422 for wrong type, 422 for missing required field |
 | `tests/test_routing.py` | Unit | No-fallback guarantee: Paris/Chicago/NYC/DC route to their own artifacts; unknown city falls back to Seoul |
-| `tests/test_model_accuracy.py` | Accuracy | Per-city RMSE gates (6 cities): trains a fresh RF from the committed CSV, asserts RMSE < threshold. Marked `@pytest.mark.slow` — runs only in CI Job 7 |
+| `tests/test_model_accuracy.py` | Accuracy | Per-city RMSE gates (6 cities): trains a fresh RF from the committed CSV, asserts RMSE < threshold. Marked `@pytest.mark.slow` — runs only in CI Job 6 |
 | `tests/test_pipeline.py` | Unit + Pipeline | Legacy Dataflow path: GBFS/TFL snapshot schema, ParseMessage DoFn, DirectRunner end-to-end; auto-skipped unless `requirements-pipeline.txt` is installed |
 | `tests/test_window_agg.py` | Unit | v3.1.0 poller: 5-minute window aggregator — empty input, single snapshot degenerate stats, multi-snapshot avg/min/max, multi-city/station keying, 2-decimal rounding parity with the Dataflow path |
 | `tests/test_gbfs_poller_service.py` | Unit | v3.1.0 poller: FastAPI service contract — health endpoint, poller trigger response shape |
@@ -456,7 +456,7 @@ pip install -r requirements-pipeline.txt
 pytest tests/test_pipeline.py -v
 ```
 
-CI runs lint → pytest (fast) → docker build → push to GHCR on every push to `main`. **Job 7 (RMSE accuracy gates)** runs in parallel with the fast pytest job on every push to `main`.
+CI runs lint → pytest (fast) → docker build → push to GHCR on every push to `main`. **Job 6 (RMSE accuracy gates)** runs in parallel with the fast pytest job on every push to `main`.
 
 ---
 
@@ -745,7 +745,7 @@ Spec: [`docs/superpowers/specs/2026-05-18-pytest-suite-design.md`](docs/superpow
 - [x] `tests/test_features.py` — `test_feature_schema_is_frozen`: frozen-set guard on 21 columns; failure message names all 6 cities + Vertex AI retrain steps
 - [x] `tests/test_model_accuracy.py` — 6 `@pytest.mark.slow` RMSE gate tests (Seoul / London / NYC / DC / Paris / Chicago); chronological 80/20 split matches `train.py` exactly
 - [x] `tests/test_routing.py` — 5 no-fallback routing tests: paris → paris, chicago → chicago, "new york" → nyc, "washington dc" → dc, unknown → seoul fallback; uses real sklearn RF + `tmp_path` to catch feature-alignment bugs
-- [x] `.github/workflows/ci.yml` Job 7 (`accuracy`) — parallel to Job 2; runs `pytest -m slow` on push to main only; ~5 min wall time (6 RF training runs)
+- [x] `.github/workflows/ci.yml` Job 6 (`accuracy`) — parallel to Job 2; runs `pytest -m slow` on push to main only; ~5 min wall time (6 RF training runs)
 
 ---
 

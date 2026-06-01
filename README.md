@@ -7,9 +7,9 @@ This project started as the **Python ML backend** for a companion R Shiny capsto
 **What it became — across six shipped versions**
 
 - **Multi-city Random Forest inference API** — per-city RF models for all 6 cities (Seoul, London, NYC, Washington DC, Paris, Chicago) served via a Pydantic-validated `/predict` endpoint on GCP Cloud Run; lazy-loaded singleton service layer decouples business logic from the API surface; train/serve feature schema persisted via `joblib` to prevent skew.
-- **Vertex AI managed retraining** — a `bike-demand-trigger` Cloud Run service submits a 6-combo hyperparameter sweep to Vertex AI every Sunday; results tracked in SQLite + GCS-backed MLflow; a 3% RMSE gate enforces model quality before any city model is promoted to the Production registry.
-- **Per-city data pipelines** — Open-Meteo historical API + GBFS open data fetchers for each city; Seoul rebuilt to a 3-year OA-15182 hourly scope (v4.2.0, 26,303 rows, RMSE 1,503.52); Paris re-aligned to wall-clock-local time with a 2022 anomaly data-quality drop (v4.3.0, RMSE 20.51).
-- **CI-enforced accuracy gates** — 40-test pytest suite: schema guards, per-city RMSE gates, no-fallback routing guarantees, Dataflow pipeline contracts, and GBFS 5-min window aggregator unit tests; enforced on every push via GitHub Actions.
+- **Vertex AI managed retraining** — a `bike-demand-trigger` Cloud Run service submitted a 6-combo hyperparameter sweep to Vertex AI every Sunday; results tracked in SQLite + GCS-backed MLflow; a 3% RMSE gate enforced model quality before any city model was promoted to the Production registry. *(Deactivated June 2026 — portfolio mode; static models are sufficient for demos. Re-enable by redeploying `bike-demand-trigger` and restoring the Cloud Scheduler cron.)*
+- **Per-city data pipelines** — Open-Meteo historical API + GBFS open data fetchers for each city; Seoul rebuilt to a 3-year OA-15182 hourly scope (v4.2.0, 26,303 rows, RMSE 1,503.52); Paris re-aligned to wall-clock-local time with a 2022 anomaly data-quality drop (v4.3.0, RMSE 20.51). GBFS live station feed paused June 2026 — resume with one `gcloud scheduler jobs resume` command.
+- **CI-enforced accuracy gates** — 66-test pytest suite (40 ML inference + 26 cost-audit): schema guards, per-city RMSE gates, no-fallback routing guarantees, Dataflow pipeline contracts, GBFS 5-min window aggregator unit tests, and GCP resource health checks; enforced on every push via GitHub Actions.
 
 **Engineering choices that signal the skills**
 
@@ -121,7 +121,6 @@ Public bike-share operators need to forecast hourly demand in order to balance f
 bike-demand-ml-system/
 │
 ├── README.md
-├── PROJECT-STATUS.md
 ├── requirements.txt                    ← pinned Python dependencies (inference API + tests)
 ├── requirements-pipeline.txt           ← Dataflow pipeline-only deps (apache-beam, pubsub, pyyaml) — not in Docker image
 ├── requirements-poller.txt             ← v3.1.0 GBFS poller deps (fastapi, uvicorn, google-cloud-bigquery, httpx)
@@ -611,14 +610,12 @@ The ~16× spread between summer rush and middle-of-night confirms the model capt
 - ~~No CI/CD pipeline (GitHub Actions)~~ — lint → test → docker build on every push ✅
 - ~~No Dockerfile or containerised deployment~~ — `Dockerfile` + `docker-compose.yml` ✅
 - ~~No hyperparameter tuning (GridSearch / Optuna)~~ — **v4.0.0 shipped:** `pipeline/retrain_job.py` runs a 6-combo `n_estimators` × `max_depth` sweep per city weekly on Vertex AI with an RMSE gate before promoting to MLflow Production ✅ (GridSearch/Optuna not currently used; the sweep is sufficient at portfolio scale)
-- ~~No experiment tracking (MLflow / Vertex AI)~~ — **v4.0.0 shipped:** `pipeline/retrain_job.py` weekly sweep + GCS-backed MLflow + RMSE gate; **4 of 6 cities** live in MLflow Production registry (Seoul / London / NYC / DC). Paris and Chicago train via the same Vertex AI job but have not yet been promoted to Production — tracked as an open candidate in [`PROJECT-STATUS.md`](PROJECT-STATUS.md) Next Step ✅
+- ~~No experiment tracking (MLflow / Vertex AI)~~ — **v4.0.0 shipped:** `pipeline/retrain_job.py` weekly sweep + GCS-backed MLflow + RMSE gate; **4 of 6 cities** live in MLflow Production registry (Seoul / London / NYC / DC). Paris and Chicago were open promotion candidates. *(Deactivated June 2026 — portfolio mode; GCS mlflow/ prefix deleted, Cloud Scheduler removed. Re-enable by redeploying `bike-demand-trigger` and restoring the cron.)* ✅
 - **Paris 2022 source export dropped as a data-quality gate** — the 2022 export from opendata.paris.fr peaks 2h later than 2023+2024 in both AM and PM rush hours and is DST-consistent within 2022, ruling out timezone-encoding causes (the parser is correct; the source aggregation is anomalous). 33% of available Paris source rows filtered out in v4.3.0 via a single reversible block in `data/fetch_paris_weather.py`. Root cause is intrinsic to the provider's internal aggregation pipeline and not user-fixable; revisit if upstream ever publishes a correction.
-- **No automated drift monitoring on inference inputs yet** — feature importances are logged to MLflow on every Vertex AI retrain, but there is no scheduled job that compares live weather distributions against the training baseline. Tracked in v4.5.0 design spec [`docs/superpowers/specs/2026-05-23-drift-monitoring-design.md`](docs/superpowers/specs/2026-05-23-drift-monitoring-design.md).
+- **No automated drift monitoring on inference inputs yet** — there is no scheduled job that compares live weather distributions against the training baseline. Targeted in v4.5.0 (design spec committed locally at `docs/superpowers/specs/2026-05-23-drift-monitoring-design.md`).
 - No request authentication or rate-limiting on the API
 - ~~No structured logging or observability hooks~~ — structured JSON → Cloud Logging + Prometheus `/metrics` shipped in v2.1.0 ✅
 - ~~Dataflow streaming pipeline has no always-free tier (~$0.05/hr on e2-medium) — run only for demos~~ — **Superseded 2026-05-25 by v3.1.0:** Cloud Run `gbfs-poller` + Cloud Scheduler (every 5 min) + BigQuery 7-day partitioned `station_snapshots` table replaces the Dataflow path at zero always-free-tier cost ✅
-
-These are tracked in [`PROJECT-STATUS.md`](PROJECT-STATUS.md).
 
 ---
 

@@ -45,9 +45,9 @@ Three decisions in the version history show judgment beyond "make it work":
 [![Status](https://img.shields.io/badge/v4.3.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/releases/tag/v4.3.0)
 [![Status](https://img.shields.io/badge/v4.4.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/releases/tag/v4.4.0)
 [![Status](https://img.shields.io/badge/v3.1.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
-[![Cloud Run](https://img.shields.io/badge/Cloud_Run-Live-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://bike-demand-api-246440913351.us-central1.run.app)
-[![GBFS Poller](https://img.shields.io/badge/GBFS_Poller-Cloud_Run-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
-[![Prometheus](https://img.shields.io/badge/Prometheus-metrics-orange?style=for-the-badge&logo=prometheus&logoColor=white)](https://bike-demand-api-246440913351.us-central1.run.app/metrics)
+[![Cloud Run](https://img.shields.io/badge/Cloud_Run-Live-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://bike-demand-api-76372oragq-uc.a.run.app)
+[![GBFS Poller](https://img.shields.io/badge/GBFS_Poller-Paused-lightgrey?style=for-the-badge&logo=googlecloud&logoColor=white)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
+[![Prometheus](https://img.shields.io/badge/Prometheus-metrics-orange?style=for-the-badge&logo=prometheus&logoColor=white)](https://bike-demand-api-76372oragq-uc.a.run.app/metrics)
 
 ---
 
@@ -211,7 +211,7 @@ bike-demand-ml-system/
 
 ### 📌 Option 1 — Local (Recommended for development)
 
-> Models for all 6 cities are trained and baked into the Docker image at build time — no pre-training step is needed before running the service.
+> All six city processed datasets are committed to the repo — no data download is needed. Clone, install, train, run.
 
 #### 1. Clone the repository
 
@@ -238,39 +238,25 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-#### 4. Place the dataset
+#### 4. Train a city model
 
-Download the Seoul 따릉이 per-trip ZIPs from [Seoul OpenData dataset OA-15182](https://data.seoul.go.kr/dataList/OA-15182/F/1/datasetView.do) — annual ZIPs for 2022, 2023, and 2024 (~600 MB compressed; ~23 GB extracted). Extract each ZIP into `data/raw/seoul/` and rename every monthly CSV to `YYYY-MM.csv`:
-
-```
-data/raw/seoul/2022-01.csv
-data/raw/seoul/2022-02.csv
-…
-data/raw/seoul/2024-12.csv
-```
-
-Then aggregate the per-trip logs to hourly counts and join Open-Meteo historical weather:
+All six city CSVs are in `data/processed/` — no download required. Train one or all:
 
 ```bash
-python -m data.fetch_seoul_weather
+# Train Seoul (default; uses data/processed/seoul_bike_sharing.csv)
+python -m models.train
+
+# Train a specific city
+python -m models.train --city paris --data data/processed/paris_bike_sharing.csv
+python -m models.train --city london --data data/processed/london_bike_sharing.csv
+python -m models.train --city nyc    --data data/processed/nyc_bike_sharing.csv
+python -m models.train --city dc     --data data/processed/dc_bike_sharing.csv
+python -m models.train --city chicago --data data/processed/chicago_bike_sharing.csv
 ```
 
-This produces `data/processed/seoul_bike_sharing.csv` (26,303 rows × 14 cols, Jan 2022 – Dec 2024). The raw monthly CSVs are gitignored — once `data/processed/seoul_bike_sharing.csv` exists you can delete them to reclaim ~23 GB; the fetch script is the durable artifact in git.
+Each command produces `models/artifacts/<city>/random_forest_model.pkl` and `feature_columns.pkl`, and prints RMSE plus top-10 feature importances to stdout.
 
-#### 5. Train the model
-
-```bash
-python -m models.train --city seoul --data data/processed/seoul_bike_sharing.csv
-```
-
-This produces:
-
-- `models/artifacts/seoul/random_forest_model.pkl`
-- `models/artifacts/seoul/feature_columns.pkl`
-
-…and prints RMSE plus the top-10 feature importances to stdout.
-
-#### 6. Start the inference API
+#### 5. Start the inference API
 
 ```bash
 uvicorn api.app:app --reload
@@ -278,7 +264,7 @@ uvicorn api.app:app --reload
 
 The API is now live at `http://127.0.0.1:8000`. Open `http://127.0.0.1:8000/docs` for the interactive Swagger UI.
 
-#### 7. Send a prediction request
+#### 6. Send a prediction request
 
 ```bash
 curl -X POST http://127.0.0.1:8000/predict \
@@ -300,6 +286,18 @@ curl -X POST http://127.0.0.1:8000/predict \
 Expected response: `{"predictions": [1570.26]}`
 
 > **`city`** is optional — defaults to `"Seoul"` if omitted. Pass `"city": "London"`, `"city": "nyc"`, `"city": "Paris"`, `"city": "Chicago"`, or `"city": "Washington DC"` to route to per-city artifacts. Unknown cities fall back to Seoul.
+
+#### Optional — Regenerate the Seoul processed CSV from source
+
+The committed `data/processed/seoul_bike_sharing.csv` (26,303 rows, Jan 2022 – Dec 2024) is derived from Seoul OpenData [OA-15182](https://data.seoul.go.kr/dataList/OA-15182/F/1/datasetView.do). It is already in git — no regeneration is needed unless you want to incorporate newer annual data. If you do:
+
+```bash
+# Download annual ZIPs from data.seoul.go.kr into data/raw/seoul/,
+# rename monthly CSVs to YYYY-MM.csv, then aggregate + join weather:
+python -m data.fetch_seoul_weather
+# Retrain with the refreshed processed file:
+python -m models.train --city seoul --data data/processed/seoul_bike_sharing.csv
+```
 
 ---
 
@@ -673,7 +671,7 @@ For NYC, the inverse logic applies — Citi Bike publishes a 17-year history int
 - [x] `docker-compose.yml` — removed volume mount; image is self-contained
 - [x] GitHub Actions Job 4 — builds and pushes to GHCR using `GITHUB_TOKEN` (no manual secrets required)
 - [x] GitHub Actions Job 5 — builds and pushes to Artifact Registry (`us-central1-docker.pkg.dev/bike-demand-ml-system/bike-demand-repo/`) + redeploys Cloud Run on every merge to main; uses `GCP_SA_KEY` secret
-- [x] `gcloud run deploy` executed — Cloud Run live at `https://bike-demand-api-246440913351.us-central1.run.app`
+- [x] `gcloud run deploy` executed — Cloud Run live at `https://bike-demand-api-76372oragq-uc.a.run.app` (URL stable; changes only if service is deleted and recreated)
 - [x] Health check confirmed: `{"message":"Bike Demand Prediction API is running"}`
 - [x] Companion Shiny repo `model_prediction.R` updated with Cloud Run URL in `FASTAPI_URL` comment
 

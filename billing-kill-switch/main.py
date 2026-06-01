@@ -71,32 +71,47 @@ def stop_billing(request):                                     # functions-frame
     credentials, _ = google.auth.default()                     # ADC — Cloud Run injects the SA credentials
     billing = discovery.build("cloudbilling", "v1", credentials=credentials)  # build the API client
 
+    # ── DRY_RUN guard — must be checked before any updateBillingInfo call ──
+    dry_run = os.environ.get("DRY_RUN", "false").strip().lower() == "true"  # only exact "true" activates
+    if dry_run:                                                # log clearly so Cloud Logging shows it
+        print("DRY_RUN=true: will list projects and log what would be unlinked — no billing changes")
+
     # ── Enumerate every project on the billing account (handles pagination) ─
-    disabled = []                                              # collect names of projects we unlink
+    disabled = []                                              # collect names of projects we act on
     page_token = None                                          # start with no pagination token
     while True:                                                # loop until all pages are consumed
         kwargs = {"name": billing_account_name}                # base request params
         if page_token:                                         # add token only when paginating
             kwargs["pageToken"] = page_token
-        response = billing.billingAccounts().projects().list(**kwargs).execute()  # list projects on account
+        try:                                                   # list call can fail if API disabled or IAM missing
+            response = billing.billingAccounts().projects().list(**kwargs).execute()  # list projects
+        except Exception as exc:                               # any API or network failure
+            print(f"ERROR listing projects on {billing_account_name}: {exc}")  # log for diagnosis
+            return ("", 204)                                   # ack so Pub/Sub doesn't retry forever
 
         for project in response.get("projectBillingInfo", []):  # iterate projects on this page
             if not project.get("billingEnabled"):              # already unlinked — skip
                 continue
             project_name = project["name"]                     # "projects/<project-id>" resource name
-            billing.projects().updateBillingInfo(              # PATCH billing info for this project
-                name=project_name,                             # target project resource name
-                body={"billingAccountName": ""},               # empty string = unlink = billing OFF
-            ).execute()                                        # execute the disable call
-            disabled.append(project_name)                      # record for the audit log
+            if dry_run:                                        # DRY_RUN: log intent, skip the actual call
+                print(f"DRY_RUN: would disable billing for {project_name}")
+                disabled.append(project_name)                  # still record so the summary is useful
+            else:                                              # live mode: unlink billing for real
+                billing.projects().updateBillingInfo(          # PATCH billing info for this project
+                    name=project_name,                         # target project resource name
+                    body={"billingAccountName": ""},           # empty string = unlink = billing OFF
+                ).execute()                                    # execute the disable call
+                disabled.append(project_name)                  # record for the audit log
 
         page_token = response.get("nextPageToken")             # None when this is the last page
         if not page_token:                                     # no more pages — exit loop
             break
 
     # ── Audit log: one line summarising the full kill-switch action ─────────
+    mode = "DRY_RUN" if dry_run else "LIVE"                   # label so log lines are unambiguous
     print(
-        f"Kill switch fired: cost={cost} >= limit={limit}. "
-        f"Disabled billing for {len(disabled)} project(s): {disabled}"
+        f"[{mode}] Kill switch fired: cost={cost} >= limit={limit}. "
+        f"{'Would disable' if dry_run else 'Disabled'} billing for "
+        f"{len(disabled)} project(s): {disabled}"
     )
     return ("", 204)                                           # ack the Pub/Sub message

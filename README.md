@@ -193,14 +193,6 @@ bike-demand-ml-system/
 │   ├── retrain_job.py                  ← Vertex AI entry point: 6-combo sweep → MLflow → RMSE gate → Model Registry
 │   └── vertex_trigger.py               ← Cloud Run HTTP handler: POST /trigger → submit CustomJob async
 │
-├── docs/
-│   └── superpowers/
-│       ├── specs/
-│       │   ├── 2026-05-16-phase5-vertex-mlflow-design.md  ← Phase 5 approved design spec
-│       │   └── 2026-05-18-pytest-suite-design.md          ← pytest three-tier suite design spec
-│       └── plans/
-│           └── 2026-05-18-pytest-suite.md                 ← pytest suite implementation plan
-│
 └── venv/                               ← virtual environment (gitignored)
 ```
 
@@ -612,7 +604,7 @@ The ~16× spread between summer rush and middle-of-night confirms the model capt
 - ~~No hyperparameter tuning (GridSearch / Optuna)~~ — **v4.0.0 shipped:** `pipeline/retrain_job.py` runs a 6-combo `n_estimators` × `max_depth` sweep per city weekly on Vertex AI with an RMSE gate before promoting to MLflow Production ✅ (GridSearch/Optuna not currently used; the sweep is sufficient at portfolio scale)
 - ~~No experiment tracking (MLflow / Vertex AI)~~ — **v4.0.0 shipped:** `pipeline/retrain_job.py` weekly sweep + GCS-backed MLflow + RMSE gate; **4 of 6 cities** live in MLflow Production registry (Seoul / London / NYC / DC). Paris and Chicago were open promotion candidates. *(Deactivated June 2026 — portfolio mode; GCS mlflow/ prefix deleted, Cloud Scheduler removed. Re-enable by redeploying `bike-demand-trigger` and restoring the cron.)* ✅
 - **Paris 2022 source export dropped as a data-quality gate** — the 2022 export from opendata.paris.fr peaks 2h later than 2023+2024 in both AM and PM rush hours and is DST-consistent within 2022, ruling out timezone-encoding causes (the parser is correct; the source aggregation is anomalous). 33% of available Paris source rows filtered out in v4.3.0 via a single reversible block in `data/fetch_paris_weather.py`. Root cause is intrinsic to the provider's internal aggregation pipeline and not user-fixable; revisit if upstream ever publishes a correction.
-- **No automated drift monitoring on inference inputs yet** — there is no scheduled job that compares live weather distributions against the training baseline. Targeted in v4.5.0 (design spec committed locally at `docs/superpowers/specs/2026-05-23-drift-monitoring-design.md`).
+- **No automated drift monitoring on inference inputs yet** — there is no scheduled job that compares live weather distributions against the training baseline. Targeted in v4.6.0.
 - No request authentication or rate-limiting on the API
 - ~~No structured logging or observability hooks~~ — structured JSON → Cloud Logging + Prometheus `/metrics` shipped in v2.1.0 ✅
 - ~~Dataflow streaming pipeline has no always-free tier (~$0.05/hr on e2-medium) — run only for demos~~ — **Superseded 2026-05-25 by v3.1.0:** Cloud Run `gbfs-poller` + Cloud Scheduler (every 5 min) + BigQuery 7-day partitioned `station_snapshots` table replaces the Dataflow path at zero always-free-tier cost ✅
@@ -690,8 +682,6 @@ For NYC, the inverse logic applies — Citi Bike publishes a 17-year history int
 
 ### Phase 5 — Vertex AI + Experiment Tracking ✅ **Done (v4.0.0 — 2026-05-17)**
 
-Spec: [`docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md`](docs/superpowers/specs/2026-05-16-phase5-vertex-mlflow-design.md)
-
 - [x] `pipeline/retrain_job.py` — Vertex AI CustomJob: CSV → chronological split → 6-combo hyperparameter sweep → MLflow → RMSE gate (3% threshold) → Model Registry promotion
 - [x] `pipeline/vertex_trigger.py` — Cloud Run HTTP endpoint: POST → submit CustomJob async; `aiplatform_v1.JobServiceClient` with `scheduling.timeout: 1800s` server-side billing cap
 - [x] `Dockerfile.training` + `requirements-vertex.txt` — training container; `python -m pipeline.retrain_job` CMD; CI Job 6 green ✅
@@ -719,8 +709,6 @@ Replaces the paused Dataflow streaming path with a zero-always-free-tier Cloud R
 
 ### Phase 9 — Automated Cost Audit ✅ Done (v4.4.0 — 2026-05-29)
 
-Spec: [`docs/superpowers/specs/2026-05-28-cost-audit-design.md`](docs/superpowers/specs/2026-05-28-cost-audit-design.md)
-
 A daily read-only audit that catches resource accumulation (registry bloat, forgotten VMs, growing BQ/GCS, unexpected services, Vertex endpoints) and month-to-date overspend early — built so the automation itself **cannot** add cost. Born from the Artifact Registry silently growing to ~38 GB / 140 image versions because CI pushed an image on every commit with nothing pruning them.
 
 - [x] `cost-audit/thresholds.py` — pure `evaluate_thresholds(readings)`: tunable threshold config + per-domain alert logic; no GCP calls (trivially unit-testable)
@@ -733,8 +721,6 @@ A daily read-only audit that catches resource accumulation (registry bloat, forg
 - [x] End-to-end verified — live run tripped 2 real registry-bloat thresholds and delivered the alert to Slack; delivery switched email → Slack incoming webhook (Microsoft app passwords require 2FA + consumer Outlook SMTP basic-auth is deprecated)
 
 ### Phase 7 — Automated Test Suite ✅ Done (2026-05-18)
-
-Spec: [`docs/superpowers/specs/2026-05-18-pytest-suite-design.md`](docs/superpowers/specs/2026-05-18-pytest-suite-design.md)
 
 - [x] `pytest.ini` — register `slow` marker (`-m slow` excludes RMSE gate tests from fast CI job)
 - [x] `tests/test_features.py` — `test_feature_schema_is_frozen`: frozen-set guard on 21 columns; failure message names all 6 cities + Vertex AI retrain steps

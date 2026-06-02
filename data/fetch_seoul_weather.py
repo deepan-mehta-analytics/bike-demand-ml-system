@@ -177,30 +177,55 @@ def _aggregate_one_year(path: Path) -> pd.DataFrame:
 
 
 def load_and_aggregate_trips() -> pd.DataFrame:
-    """Glob OA-15182 year files in RAW_DIR; aggregate each; concat → seoul_trips_hourly.csv."""
+    """Glob OA-15182 year files in RAW_DIR; aggregate each; concat → seoul_trips_hourly.csv.
+
+    Supports two source file layouts:
+      Annual:  data/raw/seoul/2022_bike_rental.csv  (filename starts with 4-digit year)
+      Monthly: data/raw/seoul/2025/jan.csv          (any CSV inside a 4-digit year subdir)
+
+    When source CSVs are found and an existing intermediate (seoul_trips_hourly.csv) exists,
+    unions them to preserve years whose source CSVs are no longer on disk (gitignored). A
+    re-run guard skips the union if the new-source dates are already in the intermediate,
+    preventing double-counting on repeat runs.
+    """
     RAW_DIR.mkdir(parents=True, exist_ok=True)                         # ensure raw directory exists
 
-    csv_paths = sorted(glob.glob(str(RAW_DIR / "[0-9][0-9][0-9][0-9]*.csv")))  # match year-prefixed source CSVs only
+    annual_csvs  = sorted(glob.glob(str(RAW_DIR / "[0-9][0-9][0-9][0-9]*.csv")))       # annual files at root
+    monthly_csvs = sorted(glob.glob(str(RAW_DIR / "[0-9][0-9][0-9][0-9]" / "*.csv")))  # monthly files in year subdirs
+    csv_paths    = annual_csvs + monthly_csvs                                            # combine both layouts
+
     if not csv_paths:                                                  # abort with download instructions if none found
         raise FileNotFoundError(
             f"No year-prefixed source CSVs found in '{RAW_DIR}'.\n"
             "Download annual ZIPs from OA-15182 (no API key required):\n"
             "  https://data.seoul.go.kr/dataList/OA-15182/F/1/datasetView.do\n"
-            "Recommended: 2022 + 2023 + 2024.\n"
-            f"Extract the CSVs and place them in '{RAW_DIR}' (filenames must start with 4 digits)."
+            "Recommended: 2022 + 2023 + 2024 + 2025.\n"
+            f"Place annual CSVs directly in '{RAW_DIR}' (filenames must start with 4 digits)\n"
+            f"or monthly CSVs in year subdirectories e.g. '{RAW_DIR}/2025/'."
         )
-    print(f"Found {len(csv_paths)} OA-15182 source CSV(s): {[Path(p).name for p in csv_paths]}")
+    print(f"Found {len(csv_paths)} OA-15182 source CSV(s)")           # Korean filenames omitted: cp1252 console
 
-    per_year = [_aggregate_one_year(Path(p)) for p in csv_paths]       # aggregate one file at a time (bounded memory)
-    hourly = (                                                         # union across years, sum any overlap
+    per_year = [_aggregate_one_year(Path(p)) for p in csv_paths]      # aggregate one file at a time (bounded memory)
+
+    if TRIPS_CSV.exists():                                             # intermediate exists — may have prior years to preserve
+        existing       = pd.read_csv(TRIPS_CSV)                       # load committed 2022-2024 intermediate
+        new_dates      = set(pd.concat(per_year, ignore_index=True)["DATE"].unique())   # dates from new source CSVs
+        existing_dates = set(existing["DATE"].unique())                # dates already in intermediate
+        if not new_dates.issubset(existing_dates):                     # new dates not yet present — safe to union
+            per_year.append(existing)                                  # include existing to preserve prior years
+            print(f"Unioned with existing {TRIPS_CSV} ({len(existing):,} rows, prior years preserved)")
+        else:
+            print(f"Re-run guard: new dates already in {TRIPS_CSV} — skipping union to prevent double-count")
+
+    hourly = (                                                         # sum across per-file aggregates to true hourly totals
         pd.concat(per_year, ignore_index=True)
           .groupby(["DATE", "HOUR"], as_index=False)["RENTED_BIKE_COUNT"]
           .sum()
     )
 
-    print(f"Hourly demand rows after concat: {len(hourly):,}")         # expect ~26,000 rows for 2022+2023+2024
+    print(f"Hourly demand rows after concat: {len(hourly):,}")        # expect ~35,000 rows for 2022-2025
     print(f"RENTED_BIKE_COUNT stats:\n{hourly['RENTED_BIKE_COUNT'].describe()}")
-    hourly.to_csv(TRIPS_CSV, index=False)                              # persist intermediate
+    hourly.to_csv(TRIPS_CSV, index=False)                             # persist intermediate
     print(f"Saved: {TRIPS_CSV}")
     return hourly
 
@@ -213,7 +238,7 @@ def fetch_weather() -> pd.DataFrame:
     last_exc = None                                                    # remember last exception for final raise
     for attempt, backoff in enumerate((2, 4, 8), start=1):             # 3 attempts: sleep 2s/4s/8s between failures
         try:
-            response = requests.get(OPENMETEO_URL, params=PARAMS, timeout=30)   # 30s socket timeout
+            response = requests.get(OPENMETEO_URL, params=PARAMS, timeout=60)   # 60s; extended for 4-year fetch window
             response.raise_for_status()                                # raise HTTPError on 4xx/5xx
             break                                                      # success: exit retry loop
         except requests.RequestException as exc:                       # transient network / 5xx

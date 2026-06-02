@@ -8,7 +8,7 @@ This project started as the **Python ML backend** for a companion R Shiny capsto
 
 - **Multi-city Random Forest inference API** — per-city RF models for all 6 cities (Seoul, London, NYC, Washington DC, Paris, Chicago) served via a Pydantic-validated `/predict` endpoint on GCP Cloud Run; lazy-loaded singleton service layer decouples business logic from the API surface; train/serve feature schema persisted via `joblib` to prevent skew.
 - **Vertex AI managed retraining** — a `bike-demand-trigger` Cloud Run service submitted a 6-combo hyperparameter sweep to Vertex AI every Sunday; results tracked in SQLite + GCS-backed MLflow; a 3% RMSE gate enforced model quality before any city model was promoted to the Production registry. *(Deactivated June 2026 — portfolio mode; static models are sufficient for demos. Re-enable by redeploying `bike-demand-trigger` and restoring the Cloud Scheduler cron.)*
-- **Per-city data pipelines** — Open-Meteo historical API + GBFS open data fetchers for each city; Seoul rebuilt to a 3-year OA-15182 hourly scope (v4.2.0, 26,303 rows, RMSE 1,503.52); Paris re-aligned to wall-clock-local time with a 2022 anomaly data-quality drop (v4.3.0, RMSE 20.51). GBFS live station feed paused June 2026 — resume with one `gcloud scheduler jobs resume` command.
+- **Per-city data pipelines** — Open-Meteo historical API + GBFS open data fetchers for each city; Seoul rebuilt to a 4-year OA-15182 hourly scope (v4.2.0 → refreshed 2026-06-02, 35,063 rows, RMSE 1,386.77); Paris re-aligned to wall-clock-local time with a 2022 anomaly data-quality drop (v4.3.0, RMSE 20.51). GBFS live station feed paused June 2026 — resume with one `gcloud scheduler jobs resume` command.
 - **CI-enforced accuracy gates** — 66-test pytest suite (40 ML inference + 26 cost-audit): schema guards, per-city RMSE gates, no-fallback routing guarantees, Dataflow pipeline contracts, GBFS 5-min window aggregator unit tests, and GCP resource health checks; enforced on every push via GitHub Actions.
 
 **Engineering choices that signal the skills**
@@ -143,7 +143,7 @@ bike-demand-ml-system/
 │   ├── fetch_paris_weather.py          ← Vélib' Métropole counter ZIPs + Open-Meteo join for Paris
 │   ├── fetch_chicago_weather.py        ← Divvy quarterly CSVs + Open-Meteo join for Chicago
 │   ├── raw/
-│   │   ├── seoul/                          ← OA-15182 monthly per-trip CSVs (2022-2024, gitignored) + Open-Meteo weather + joined CSV
+│   │   ├── seoul/                          ← OA-15182 monthly per-trip CSVs (2022-2025, gitignored) + Open-Meteo weather + joined CSV
 │   │   ├── london/london_merged.csv        ← Kaggle London dataset
 │   │   ├── nyc/                            ← BigQuery export + Open-Meteo weather + joined CSV
 │   │   ├── dc/                             ← Capital Bikeshare CSVs + Open-Meteo weather + joined CSV
@@ -288,7 +288,7 @@ Expected response: `{"predictions": [1570.26]}`
 
 #### Optional — Regenerate the Seoul processed CSV from source
 
-The committed `data/processed/seoul_bike_sharing.csv` (26,303 rows, Jan 2022 – Dec 2024) is derived from Seoul OpenData [OA-15182](https://data.seoul.go.kr/dataList/OA-15182/F/1/datasetView.do). It is already in git — no regeneration is needed unless you want to incorporate newer annual data. If you do:
+The committed `data/processed/seoul_bike_sharing.csv` (35,063 rows, Jan 2022 – Dec 2025) is derived from Seoul OpenData [OA-15182](https://data.seoul.go.kr/dataList/OA-15182/F/1/datasetView.do). It is already in git — no regeneration is needed unless you want to incorporate newer annual data. If you do:
 
 ```bash
 # Download annual ZIPs from data.seoul.go.kr into data/raw/seoul/,
@@ -467,7 +467,7 @@ All RMSEs use a chronological 80/20 split (oldest 80% → train, newest 20% → 
 
 | City | Dataset | Rows | RMSE (bikes/hr) | Top Feature | Status |
 |------|---------|------|-----------------|-------------|--------|
-| Seoul | Seoul OA-15182 + Open-Meteo | 26,303 | **1,503.52** | HOUR (0.47) | ✅ Trained |
+| Seoul | Seoul OA-15182 + Open-Meteo | 35,063 | **1,386.77** | HOUR (0.47) | ✅ Trained |
 | London | Kaggle London Bike Sharing | 17,414 | **316.56** | HOUR (0.71) | ✅ Trained |
 | NYC | BigQuery `new_york_citibike` + Open-Meteo | 34,187 | **470.76** | HOUR (0.52) | ✅ Trained |
 | Washington DC | Capital Bikeshare CSVs + Open-Meteo | 37,663 | **119.31** | HOUR (0.62) | ✅ Trained |
@@ -489,12 +489,12 @@ See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL +
 | Metric | Value |
 |---|---|
 | Algorithm | Random Forest Regressor (`n_estimators=100`, `random_state=42`) |
-| RMSE | **1,503.52** |
+| RMSE | **1,386.77** |
 | MAE | **828.77** |
 | MSE | 2,260,563.09 |
 | Train / Test split | Chronological 80/20 — oldest 80% → train, newest 20% → test |
-| Train / Test rows | 21,042 / 5,261 |
-| Data source | Seoul OpenData OA-15182 따릉이 per-trip log + Open-Meteo historical weather (Jan 2022 – Dec 2024) |
+| Train / Test rows | 28,050 / 7,013 |
+| Data source | Seoul OpenData OA-15182 따릉이 per-trip log + Open-Meteo historical weather (Jan 2022 – Dec 2025) |
 | Scaling | None (RF is scale-invariant — scaling removed from pipeline) |
 
 ### Top Feature Importances
@@ -512,7 +512,7 @@ See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL +
 | 9 | `HUMIDITY` | 0.019 |
 | 10 | `day` | 0.014 |
 
-**Key insight surfaced by the model:** `HOUR` dominates the forecast (0.47), with `TEMPERATURE` (0.15) and `RAINFALL` (0.09) the strongest weather signals — a different shape from the prior UCI 2017–2018 baseline (TEMPERATURE 0.40, HOUR 0.29), which captured a single year of a then-young system. The new 3-year window (2022–2024) reflects a mature, commuter-driven Seoul fleet at ~7× the previous trip volume, so the hour-of-day signal dominates the same way it does in NYC (HOUR 0.52), DC (HOUR 0.62), and London (HOUR 0.71). `VISIBILITY` drops out of the top 10 because Open-Meteo returns a near-constant value (2000) for Seoul — the Random Forest correctly identifies it as non-informative.
+**Key insight surfaced by the model:** `HOUR` dominates the forecast (0.47), with `TEMPERATURE` (0.15) and `RAINFALL` (0.09) the strongest weather signals — a different shape from the prior UCI 2017–2018 baseline (TEMPERATURE 0.40, HOUR 0.29), which captured a single year of a then-young system. The new 4-year window (2022–2025) reflects a mature, commuter-driven Seoul fleet at ~7× the previous trip volume, so the hour-of-day signal dominates the same way it does in NYC (HOUR 0.52), DC (HOUR 0.62), and London (HOUR 0.71). `VISIBILITY` drops out of the top 10 because Open-Meteo returns a near-constant value (2000) for Seoul — the Random Forest correctly identifies it as non-informative.
 
 ### NYC — Random Forest Regressor
 
@@ -621,7 +621,7 @@ The ~16× spread between summer rush and middle-of-night confirms the model capt
 
 ## 📈 Scaling Considerations
 
-The Seoul pipeline processes ~23 GB of raw per-trip CSVs (36 months × ~640 MB) into a 26,303-row hourly dataset via a single Python script that streams each month, aggregates in memory with pandas, and joins Open-Meteo weather. This is deliberate: at portfolio scale, a transparent script beats opaque infrastructure for showing the actual data work. The table below names the heavier alternatives I would reach for at each step-change in data volume or team size.
+The Seoul pipeline processes ~31 GB of raw per-trip CSVs (48 months × ~640 MB) into a 35,063-row hourly dataset via a single Python script that streams each month, aggregates in memory with pandas, and joins Open-Meteo weather. This is deliberate: at portfolio scale, a transparent script beats opaque infrastructure for showing the actual data work. The table below names the heavier alternatives I would reach for at each step-change in data volume or team size.
 
 | Tier | Pattern | When to adopt | Currently in this repo |
 |---|---|---|---|
@@ -750,7 +750,7 @@ Six city datasets are normalised to a common 14-column Seoul schema before train
 
 | City | Source | Rows | Period | Notes |
 |------|--------|------|--------|-------|
-| **Seoul** | [Seoul OpenData OA-15182 따릉이 per-trip log](https://data.seoul.go.kr/dataList/OA-15182/F/1/datasetView.do) + [Open-Meteo](https://open-meteo.com/) | 26,303 | Jan 2022 – Dec 2024 | Monthly per-trip CSVs aggregated to hourly counts; weather joined via `fetch_seoul_weather.py` |
+| **Seoul** | [Seoul OpenData OA-15182 따릉이 per-trip log](https://data.seoul.go.kr/dataList/OA-15182/F/1/datasetView.do) + [Open-Meteo](https://open-meteo.com/) | 35,063 | Jan 2022 – Dec 2025 | Monthly per-trip CSVs aggregated to hourly counts; weather joined via `fetch_seoul_weather.py` |
 | **London** | [Kaggle London Bike Sharing](https://www.kaggle.com/datasets/hmavrodiev/london-bike-sharing-dataset) | 17,414 | Jan 2015 – Jan 2017 | 3 meteorological columns absent (zeroed) |
 | **NYC** | [BigQuery `new_york_citibike`](https://console.cloud.google.com/marketplace/product/city-of-new-york/nyc-citi-bike) + [Open-Meteo](https://open-meteo.com/) | 34,187 | Jan 2014 – Dec 2018 | Trip counts from BigQuery; weather joined via `fetch_nyc_weather.py` |
 | **Washington DC** | [Capital Bikeshare system data](https://capitalbikeshare.com/system-data) + [Open-Meteo](https://open-meteo.com/) | 37,663 | Jan 2014 – Dec 2018 | Trip counts aggregated from quarterly CSVs; weather joined via `fetch_dc_weather.py` |

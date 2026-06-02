@@ -138,7 +138,7 @@ def _resolve_start_time_col(columns) -> str:
 # ── Step 1: Aggregate per-trip data to hourly demand ─────────────────────────
 def _aggregate_one_year(path: Path) -> pd.DataFrame:
     """Read one annual CSV in chunks; aggregate to hourly; return small DataFrame."""
-    print(f"  Aggregating {path.name}...")                             # progress line for human watching the log
+    print(f"  Aggregating {path.name.encode('ascii', errors='replace').decode('ascii')}...")  # ASCII-safe filename for cp1252 terminals
     aggregates = []                                                    # list of per-chunk groupby results
     start_col = None                                                   # resolved on first chunk; reused across chunks
 

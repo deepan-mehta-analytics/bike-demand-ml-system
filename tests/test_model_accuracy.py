@@ -13,7 +13,7 @@ from models.features import create_features, get_feature_target  # shared featur
 # while still catching meaningful data-quality or feature-pipeline regressions.
 # All six cities load from data/processed/ (uppercase Seoul schema).
 _CITY_CONFIGS = [
-    ("data/processed/seoul_bike_sharing.csv",  "seoul",  2200),  # trained RMSE 1503.52; threshold 2200
+    ("data/processed/seoul_bike_sharing.csv",  "seoul",  2080),  # trained RMSE 1386.77; 2022-2025 OA-15182; threshold = round(rmse × 1.5)
     ("data/processed/london_bike_sharing.csv", "london",  350),  # trained RMSE 228.58; threshold 350
     ("data/processed/nyc_bike_sharing.csv",    "nyc",     500),  # trained RMSE 345.69; threshold 500
     ("data/processed/dc_bike_sharing.csv",     "dc",      150),  # trained RMSE  97.47; threshold 150

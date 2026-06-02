@@ -1,7 +1,6 @@
 # tests/test_fetch_seoul.py
 import glob                                                            # filesystem globbing under test
 import pandas as pd                                                    # DataFrame construction in helpers
-import pytest                                                          # test framework
 from pathlib import Path                                               # path construction in tests
 
 
@@ -66,7 +65,6 @@ def test_rerun_guard_prevents_double_count():
 
     new_dates      = set(pd.concat(new_data, ignore_index=True)["DATE"].unique())   # dates from new source
     existing_dates = set(existing["DATE"].unique())                                 # dates in intermediate
-    should_union   = not new_dates.issubset(existing_dates)                         # guard condition
 
     assert new_dates.issubset(existing_dates)                         # all new dates present — guard fires, no union
 

@@ -36,6 +36,9 @@ data/raw/seoul/[0-9][0-9][0-9][0-9]*.zip
 # Script globs all [0-9]{4}*.csv in data/raw/seoul/ — ignore year-prefixed source files, keep intermediate outputs
 data/raw/seoul/[0-9][0-9][0-9][0-9]*.csv
 
+# Seoul OA-15182 monthly layout — year subdirectories contain per-month CSVs (e.g. data/raw/seoul/2025/)
+data/raw/seoul/[0-9][0-9][0-9][0-9]/
+
 # internal planning artifacts
 docs/superpowers/
 

@@ -19,4 +19,4 @@ USER appuser
 ENV PORT=8080
 
 # Start the functions-framework HTTP server targeting the audit() handler.
-CMD exec functions-framework --target=audit --port=$PORT
+CMD ["sh", "-c", "exec functions-framework --target=audit --port=${PORT:-8080}"]

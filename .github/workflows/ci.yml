@@ -14,7 +14,7 @@ jobs:
   # Job 1: Lint
   lint:
     name: Ruff lint
-    runs-on: ubuntu-latest                       # standard GitHub-hosted runner
+    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
     steps:
       - uses: actions/checkout@v6                # check out source
       - uses: actions/setup-python@v6            # provision Python
@@ -26,7 +26,7 @@ jobs:
   # Job 2: Test
   test:
     name: pytest
-    runs-on: ubuntu-latest                       # standard runner
+    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
     needs: lint                                  # skip tests if lint fails
     steps:
       - uses: actions/checkout@v6                # check out source
@@ -40,7 +40,7 @@ jobs:
   # Job 3: Docker Build
   docker:
     name: Docker build
-    runs-on: ubuntu-latest                       # standard runner
+    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
     needs: test                                  # only build image if tests pass
     steps:
       - uses: actions/checkout@v6                # check out source
@@ -51,7 +51,7 @@ jobs:
   # uses GITHUB_TOKEN — no manual secrets required
   publish:
     name: Push to GHCR
-    runs-on: ubuntu-latest                       # standard runner
+    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
     needs: docker                                # only publish if docker build passes
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -77,7 +77,7 @@ jobs:
   # GAR path: us-central1-docker.pkg.dev/bike-demand-ml-system/bike-demand-repo/bike-demand-ml-system
   publish-gar:
     name: Push to GAR + redeploy Cloud Run
-    runs-on: ubuntu-latest                       # standard runner
+    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
     needs: docker                                # only publish if docker build passes
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
@@ -112,7 +112,7 @@ jobs:
   # Expected wall time: ~5 min (6 RF training runs).
   accuracy:
     name: RMSE accuracy gates
-    runs-on: ubuntu-latest                        # standard GitHub-hosted runner
+    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
     needs: lint                                   # parallel to test job; skip only if lint fails
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
@@ -122,3 +122,20 @@ jobs:
           python-version: "3.11"                  # match all other jobs
       - run: pip install -r requirements.txt      # install sklearn, pandas, joblib, pytest
       - run: pytest -m slow tests/test_model_accuracy.py -v  # run the 6 RMSE gate tests only
+
+  # ── Runner pin guard ────────────────────────────────────────────────────
+  # ubuntu-latest moved from 24.04 to 26.04 in Oct-Nov 2026 and broke an R
+  # build in another repo. Every job must name an exact image; this job fails
+  # if any workflow uses a moving "-latest" runner label.
+  runner-pin-guard:
+    name: Runner pin guard                                   # label shown in the Actions UI
+    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
+    steps:
+      - uses: actions/checkout@v6                                     # check out the workflow files
+      - name: Fail on moving runner labels                   # the fail-safe check
+        run: |                                               # bash step
+          echo "::notice::Runner image $ImageOS $ImageVersion"   # record which image ran
+          if grep -rnE '^[^#]*(ubuntu|windows|macos)-latest' .github/workflows; then  # any -latest label outside a comment (runs-on or matrix)?
+            echo "::error::Pin runners to an exact image (e.g. ubuntu-24.04), never *-latest"   # explain the failure
+            exit 1                                           # fail the job
+          fi                                                 # end of check

@@ -1,5 +1,6 @@
 # ── Imports ───────────────────────────────────────────────────────────────────
 import logging                                                          # structured logging to stdout (Cloud Logging reads stdout)
+from datetime import datetime, timedelta, timezone                      # build the "last 24 hours" log filter timestamp
 import requests                                                         # HTTP client for REST-based GCP API calls
 import google.auth                                                      # ADC credential resolution (uses SA in Cloud Run, gcloud in dev)
 import google.auth.transport.requests as google_requests               # transport object required to refresh ADC tokens
@@ -163,3 +164,44 @@ def check_cloud_run(project: str, location: str) -> dict:
 
     logger.info(f"Cloud Run: {len(services)} services found")
     return {"services": services}                                       # caller passes into evaluate_thresholds
+
+
+# ── Cloud Run memory-limit errors (Cloud Logging REST) ───────────────────────
+# Added after v4.5.1: bike-demand-api crashed on every /predict for weeks
+# ("Memory limit of 512 MiB exceeded") while every other signal looked healthy.
+
+_LOGGING_LIST_URL = "https://logging.googleapis.com/v2/entries:list"    # read-only log query endpoint
+_MAX_LOG_PAGES = 10                                                     # cap: 10 pages x 1000 entries is plenty for a daily count
+
+
+def check_cloud_run_memory_errors(project: str, hours: int = 24) -> dict:
+    """Count Cloud Run "Memory limit of ... exceeded" log entries per service in the last `hours`.
+
+    Returns {"memory_errors": {service_name: count}}; an empty dict means healthy.
+    The service account needs roles/logging.viewer (logging.logEntries.list).
+    """
+    headers = _get_auth_headers()                                       # fresh Bearer token for the REST call
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")  # RFC 3339 lower bound
+    log_filter = (                                                      # Cloud Logging query language
+        'resource.type="cloud_run_revision" '                           # Cloud Run services only
+        'AND textPayload:"Memory limit of" '                            # the platform's OOM message
+        f'AND timestamp>="{since}"'                                     # only the audit window
+    )
+    counts = {}                                                         # {service_name: number of memory-limit errors}
+    page_token = None                                                   # no token for the first page
+    for _ in range(_MAX_LOG_PAGES):                                     # bounded paging so a log flood cannot stall the audit
+        body = {"resourceNames": [f"projects/{project}"], "filter": log_filter, "pageSize": 1000}  # request body
+        if page_token:                                                  # continue from the previous page
+            body["pageToken"] = page_token
+        resp = requests.post(_LOGGING_LIST_URL, headers=headers, json=body, timeout=30)  # read-only list call
+        resp.raise_for_status()                                         # 403 (missing logging.viewer) surfaces as a failed check
+        data = resp.json()                                              # parsed response body
+        for entry in data.get("entries", []):                           # "entries" absent = no matches on this page
+            service = entry.get("resource", {}).get("labels", {}).get("service_name", "<unknown>")  # which service crashed
+            counts[service] = counts.get(service, 0) + 1                # tally per service
+        page_token = data.get("nextPageToken")                          # more pages?
+        if not page_token:                                              # done when the API returns no token
+            break
+
+    logger.info(f"Cloud Run memory errors ({hours} h): {counts or 'none'}")
+    return {"memory_errors": counts}                                    # caller passes into evaluate_thresholds

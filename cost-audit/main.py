@@ -11,6 +11,7 @@ from checks import (                                                    # all se
     check_spend_mtd,
     check_gcs,
     check_cloud_run,
+    check_cloud_run_memory_errors,                                      # v4.5.1 lesson: crashing services looked healthy
 )
 from thresholds import evaluate_thresholds                              # pure threshold evaluation — no GCP calls
 from notify import format_alert_message, send_alert                     # message formatting + email delivery
@@ -49,6 +50,7 @@ def audit(request):
         ("spend",      check_spend_mtd,          (PROJECT,)),
         ("gcs",        check_gcs,                (PROJECT,)),
         ("cloud_run",  check_cloud_run,          (PROJECT, LOCATION)),
+        ("cloud_run_errors", check_cloud_run_memory_errors, (PROJECT,)),
     ]:
         try:
             readings[label] = fn(*args)                                 # call the check function with its arguments

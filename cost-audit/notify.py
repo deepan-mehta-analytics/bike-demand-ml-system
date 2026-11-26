@@ -51,6 +51,15 @@ def format_alert_message(alerts: list) -> str:                          # conver
                 f"  • MTD Spend: ₹{alert['mtd_cost_inr']:.0f} "
                 f"(limit ₹{alert['limit']:.0f})"
             )                                                           # INR to nearest rupee
+        elif check == "cloud_run_memory_errors":
+            lines.append(
+                f"  • Cloud Run: `{alert['service']}` hit its memory limit {alert['count']} time(s) in 24 h "
+                f"(instances crash and restart; check `gcloud logging read` for \"Memory limit of\")"
+            )                                                           # crash count with the log query to investigate
+        elif check == "check_failed":
+            lines.append(
+                f"  • Audit check `{alert['label']}` could not run: {str(alert['error'])[:200]}"
+            )                                                           # truncated error so a long API message stays readable
         else:                                                           # defensive fallback for any undocumented check key
             lines.append(f"  • Unknown check: {check} — {alert}")     # surfaces new alert types that lack a formatter branch
     return "\n".join(lines)                                             # single string; Slack renders \n as line breaks

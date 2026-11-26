@@ -13,6 +13,7 @@ THRESHOLDS = {                                                          # single
         "cost-audit",                                                   # this monitoring service
     }),
     "spend_mtd_max_inr": 300.0,                                         # portfolio-mode target: ~₹80-120/month expected; 300 gives safe headroom before escalation
+    "cloud_run_memory_errors_max": 0,                                   # any "Memory limit ... exceeded" in 24 h = instances are crashing (v4.5.1 lesson)
 }
 
 
@@ -93,5 +94,22 @@ def evaluate_thresholds(readings: dict) -> list:                        # evalua
             "mtd_cost_inr": mtd,                                        # actual spend
             "limit": THRESHOLDS["spend_mtd_max_inr"],                   # the threshold that was exceeded
         })
+
+    # ── Cloud Run memory-limit errors ─────────────────────────────────────────
+    for service, count in readings.get("cloud_run_errors", {}).get("memory_errors", {}).items():  # per service
+        if count > THRESHOLDS["cloud_run_memory_errors_max"]:           # any crash in the window trips
+            alerts.append({
+                "check": "cloud_run_memory_errors",                     # discriminator key
+                "service": service,                                     # which service is crashing
+                "count": count,                                         # how many times in the window
+                "limit": THRESHOLDS["cloud_run_memory_errors_max"],     # the threshold that was exceeded
+            })
+
+    # ── Checks that could not run ─────────────────────────────────────────────
+    # main.py stores {"error": ...} when a check raises. Silently skipping it made a
+    # broken check look healthy; report it so a missing permission is noticed.
+    for label, reading in readings.items():                             # every check's result
+        if isinstance(reading, dict) and "error" in reading:            # check raised instead of returning data
+            alerts.append({"check": "check_failed", "label": label, "error": reading["error"]})
 
     return alerts                                                       # empty list = all healthy = no Slack notification

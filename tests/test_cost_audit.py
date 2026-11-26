@@ -331,6 +331,76 @@ def test_check_cloud_run_extracts_name_and_min_instances():
     assert result["services"][0]["min_instances"] == 0                 # scale-to-zero confirmed
 
 
+# ── Cloud Run memory-limit errors (added 2026-11-26 after the v4.5.1 incident) ──
+from checks import check_cloud_run_memory_errors                         # new check under test  # noqa: E402
+
+
+def _log_entry(service):                                                # helper — one fake Cloud Logging entry for a service
+    """Return a minimal Cloud Logging entry dict for a Cloud Run revision."""
+    return {"resource": {"labels": {"service_name": service}}, "textPayload": "Memory limit of 512 MiB exceeded"}
+
+
+def test_check_memory_errors_counts_per_service_across_pages():
+    """check_cloud_run_memory_errors counts log entries per service and follows nextPageToken."""
+    page1 = MagicMock()                                                 # first page: two api errors, one token
+    page1.json.return_value = {"entries": [_log_entry("bike-demand-api"), _log_entry("bike-demand-api")], "nextPageToken": "t2"}
+    page2 = MagicMock()                                                 # second page: one error from another service, no token
+    page2.json.return_value = {"entries": [_log_entry("cost-audit")]}
+
+    with patch("checks.requests.post", side_effect=[page1, page2]) as mock_post, \
+         patch("checks._get_auth_headers", return_value={"Authorization": "Bearer fake"}):
+        result = check_cloud_run_memory_errors("proj")
+
+    assert result["memory_errors"] == {"bike-demand-api": 2, "cost-audit": 1}  # grouped counts across both pages
+    assert mock_post.call_count == 2                                    # followed the page token exactly once
+    sent_filter = mock_post.call_args_list[0].kwargs["json"]["filter"]  # filter sent to the Logging API
+    assert 'textPayload:"Memory limit of"' in sent_filter              # matches the Cloud Run OOM message
+    assert 'resource.type="cloud_run_revision"' in sent_filter          # only Cloud Run revisions
+
+
+def test_check_memory_errors_empty_when_no_entries():
+    """No matching log entries -> empty dict (healthy)."""
+    page = MagicMock()                                                  # response with no "entries" key at all
+    page.json.return_value = {}
+    with patch("checks.requests.post", return_value=page), \
+         patch("checks._get_auth_headers", return_value={"Authorization": "Bearer fake"}):
+        result = check_cloud_run_memory_errors("proj")
+
+    assert result["memory_errors"] == {}                                # nothing to report
+
+
+def test_memory_errors_trip_alert(healthy_readings):
+    """Any memory-limit error on any service trips an alert naming the service and count."""
+    healthy_readings["cloud_run_errors"] = {"memory_errors": {"bike-demand-api": 59}}  # today's real count
+    alerts = evaluate_thresholds(healthy_readings)
+    assert alerts == [{"check": "cloud_run_memory_errors", "service": "bike-demand-api", "count": 59, "limit": 0}]
+
+
+def test_zero_memory_errors_no_alert(healthy_readings):
+    """An empty memory_errors dict is healthy."""
+    healthy_readings["cloud_run_errors"] = {"memory_errors": {}}        # check ran and found nothing
+    assert evaluate_thresholds(healthy_readings) == []
+
+
+def test_failed_check_trips_alert(healthy_readings):
+    """A check that raised (stored as {"error": ...} by main.py) alerts instead of looking healthy."""
+    healthy_readings["cloud_run_errors"] = {"error": "403 PERMISSION_DENIED logging.logEntries.list"}
+    alerts = evaluate_thresholds(healthy_readings)
+    assert alerts == [{"check": "check_failed", "label": "cloud_run_errors", "error": "403 PERMISSION_DENIED logging.logEntries.list"}]
+
+
+def test_format_memory_error_and_check_failed_messages():
+    """Formatter has dedicated lines for both new alert types (no 'Unknown check' fallback)."""
+    msg = format_alert_message([
+        {"check": "cloud_run_memory_errors", "service": "bike-demand-api", "count": 59, "limit": 0},
+        {"check": "check_failed", "label": "cloud_run_errors", "error": "403"},
+    ])
+    assert "bike-demand-api" in msg and "59" in msg                    # service and count visible
+    assert "memory limit" in msg.lower()                               # says what happened
+    assert "cloud_run_errors" in msg and "403" in msg                  # failed check named with its error
+    assert "Unknown check" not in msg                                  # both have real formatter branches
+
+
 # ── main.py integration tests ─────────────────────────────────────────────────
 import importlib                                                        # used to reload main module after env var changes  # noqa: E402
 
@@ -345,6 +415,7 @@ def _healthy_check_readings():                                          # helper
         "spend":     {"mtd_cost_inr": 100.0},                          # well under ₹300 portfolio-mode limit
         "gcs":       {"bucket_sizes": {}},                             # no buckets over limit
         "cloud_run": {"services": [{"name": "bike-demand-api", "min_instances": 0}]},  # one approved service at scale-to-zero
+        "cloud_run_errors": {"memory_errors": {}},                     # no memory-limit errors in the last 24 h
     }
 
 
@@ -359,6 +430,7 @@ def test_audit_handler_silent_when_all_healthy():
          patch("main.check_spend_mtd",         return_value=healthy["spend"]), \
          patch("main.check_gcs",               return_value=healthy["gcs"]), \
          patch("main.check_cloud_run",         return_value=healthy["cloud_run"]), \
+         patch("main.check_cloud_run_memory_errors", return_value=healthy["cloud_run_errors"]), \
          patch("main.send_alert")           as mock_alert:          # email must never be sent on a healthy day
         import main as audit_main                                       # import after patches are in place
         fake_request = MagicMock()                                      # functions-framework passes a Flask Request object
@@ -413,6 +485,7 @@ def test_audit_handler_sends_email_when_threshold_tripped(monkeypatch):
          patch("main.check_spend_mtd",         return_value=tripped["spend"]), \
          patch("main.check_gcs",               return_value=tripped["gcs"]), \
          patch("main.check_cloud_run",         return_value=tripped["cloud_run"]), \
+         patch("main.check_cloud_run_memory_errors", return_value=tripped["cloud_run_errors"]), \
          patch("main.send_alert")           as mock_alert:          # intercept email delivery
         mock_alert.return_value = True                                  # simulate email accepted
         body, status = audit_main.audit(MagicMock())

@@ -8,3 +8,8 @@ __pycache__/
 .claude/
 models/*.pkl
 data/chroma_db/
+# Local-only folders that are gitignored but were still sent to Docker as build context
+# (~24 GB on a dev machine: mlruns 16.5 GB, raw downloads 8 GB). No image copies them:
+# Dockerfile trains from data/processed/, Dockerfile.training copies named processed CSVs.
+mlruns/
+data/raw/

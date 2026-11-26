@@ -9,6 +9,24 @@ import joblib                                                          # artifac
 from models.features import load_data, create_features, get_feature_target  # shared feature pipeline
 
 
+# ── Per-City Forest Settings ─────────────────────────────────────────────────
+# The API caches every city's model in one Cloud Run instance capped at 512 MiB.
+# Unlimited 100-tree forests grew one leaf per training row: 108–261 MB per
+# city, ~1.2 GB for six, which crashed the instance on every /predict (v4.5.1).
+# 50 trees with a 5-row leaf minimum: ~10–22 MB per city, holdout RMSE equal or
+# lower in 4 of 5 cities. Paris (small, normalised demand values) keeps 100
+# trees with a depth cap instead: ~61 MB, RMSE within 0.5% of unlimited.
+_FOREST_SETTINGS = {                                                   # per-city overrides, keyed by --city value
+    "paris": {"n_estimators": 100, "max_depth": 15},                   # depth cap keeps Paris accuracy
+}
+_DEFAULT_FOREST_SETTINGS = {"n_estimators": 50, "min_samples_leaf": 5}  # every other city
+
+
+def forest_settings(city: str) -> dict:
+    """Return RandomForestRegressor size settings for a city (shared with the RMSE + size gate tests)."""
+    return dict(_FOREST_SETTINGS.get(city.lower(), _DEFAULT_FOREST_SETTINGS))  # copy so callers cannot mutate the defaults
+
+
 # ── CLI Argument Parser ──────────────────────────────────────────────────────
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -31,9 +49,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(                                               # number of trees; affects speed vs accuracy
         "--n-estimators",
         type=int,
-        default=100,
+        default=None,
         dest="n_estimators",
-        help="Number of trees in the Random Forest (default: 100)",
+        help="Override the number of trees (default: the city's setting in forest_settings(): 50, or 100 for Paris)",
     )
     parser.add_argument(                                               # fixed seed for reproducible results
         "--random-state",
@@ -47,13 +65,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
 # ── Training Pipeline ────────────────────────────────────────────────────────
 
-def train(city: str, data_path: str, n_estimators: int, random_state: int) -> dict:
+def train(city: str, data_path: str, n_estimators: int | None, random_state: int) -> dict:
     """Run the full training pipeline for one city.
 
     Parameters:
         city:          lowercase city identifier matching the artifact directory name
         data_path:     path to a CSV in Seoul schema format
-        n_estimators:  number of trees in the Random Forest
+        n_estimators:  tree count override; None uses the city's forest_settings() value
         random_state:  seed for the train/test split and RF training
 
     Returns:
@@ -87,9 +105,12 @@ def train(city: str, data_path: str, n_estimators: int, random_state: int) -> di
     # ── Model Training ───────────────────────────────────────────────────────
     # Random Forest is invariant to monotonic feature scaling,
     # so StandardScaler is intentionally omitted from this pipeline.
+    settings = forest_settings(city)                                   # per-city size settings so all six fit in the 512 MiB API
+    if n_estimators is not None:                                       # explicit CLI override wins
+        settings["n_estimators"] = n_estimators                        # replace the city's default tree count
     model = RandomForestRegressor(                                     # ensemble of decision trees
-        n_estimators=n_estimators,                                     # number of trees in the forest
         random_state=random_state,                                     # reproducible node splits inside each tree
+        **settings,                                                    # tree count + leaf minimum or depth cap
     )
     model.fit(X_train, y_train)                                        # fit forest on raw (unscaled) training features
 
@@ -128,7 +149,7 @@ if __name__ == "__main__":
 
     print(f"\nTraining RF model -- city: {args.city}")                 # training header
     print(f"Data path : {args.data}")                                  # show input file being used
-    print(f"Trees     : {args.n_estimators}  |  Seed: {args.random_state}\n")  # show hyperparameters
+    print(f"Forest    : {forest_settings(args.city)}  |  Tree override: {args.n_estimators}  |  Seed: {args.random_state}\n")  # show hyperparameters
 
     result = train(                                                    # run the full training pipeline
         city=args.city,                                                # city identifier for artifact directory

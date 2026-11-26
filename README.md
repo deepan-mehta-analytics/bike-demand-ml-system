@@ -6,10 +6,10 @@ This project started as the **Python ML backend** for a companion R Shiny capsto
 
 **What it became — across six shipped versions**
 
-- **Multi-city Random Forest inference API** — per-city RF models for all 6 cities (Seoul, London, NYC, Washington DC, Paris, Chicago) served via a Pydantic-validated `/predict` endpoint on GCP Cloud Run; lazy-loaded singleton service layer decouples business logic from the API surface; train/serve feature schema persisted via `joblib` to prevent skew.
+- **Multi-city Random Forest inference API** — per-city RF models for all 6 cities (Seoul, London, NYC, Washington DC, Paris, Chicago) served via a Pydantic-validated `/predict` endpoint on GCP Cloud Run; lazy-loaded singleton service layer decouples business logic from the API surface; train/serve feature schema persisted via `joblib` to prevent skew. Since v4.5.1 the six models are size-capped per city (~146 MB together, ~8× smaller) so they all fit in one 512 MiB instance, with equal or better RMSE in 4 of 6 cities, and a CI gate fails any model that grows back.
 - **Vertex AI managed retraining** — a `bike-demand-trigger` Cloud Run service submitted a 6-combo hyperparameter sweep to Vertex AI every Sunday; results tracked in SQLite + GCS-backed MLflow; a 3% RMSE gate enforced model quality before any city model was promoted to the Production registry. *(Deactivated June 2026 — portfolio mode; static models are sufficient for demos. Re-enable by redeploying `bike-demand-trigger` and restoring the Cloud Scheduler cron.)*
 - **Per-city data pipelines** — Open-Meteo historical API + GBFS open data fetchers for each city; Seoul rebuilt to a 4-year OA-15182 hourly scope (v4.2.0 → refreshed 2026-06-02, 35,063 rows, RMSE 1,386.77); Paris re-aligned to wall-clock-local time with a 2022 anomaly data-quality drop (v4.3.0, RMSE 20.51). GBFS live station feed paused June 2026 — resume with one `gcloud scheduler jobs resume` command.
-- **CI-enforced accuracy gates** — 66-test pytest suite (40 ML inference + 26 cost-audit): schema guards, per-city RMSE gates, no-fallback routing guarantees, Dataflow pipeline contracts, GBFS 5-min window aggregator unit tests, and GCP resource health checks; enforced on every push via GitHub Actions.
+- **CI-enforced accuracy gates** — 72-test pytest suite (46 ML inference + data + 26 cost-audit): schema guards, per-city RMSE + model-size gates, no-fallback routing guarantees, Dataflow pipeline contracts, GBFS 5-min window aggregator unit tests, and GCP resource health checks; enforced on every push via GitHub Actions.
 
 **Engineering choices that signal the skills**
 
@@ -44,6 +44,8 @@ Three decisions in the version history show judgment beyond "make it work":
 [![Status](https://img.shields.io/badge/v4.2.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/releases/tag/v4.2.0)
 [![Status](https://img.shields.io/badge/v4.3.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/releases/tag/v4.3.0)
 [![Status](https://img.shields.io/badge/v4.4.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/releases/tag/v4.4.0)
+[![Status](https://img.shields.io/badge/v4.5.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/releases/tag/v4.5.0)
+[![Status](https://img.shields.io/badge/v4.5.1-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/releases/tag/v4.5.1)
 [![Status](https://img.shields.io/badge/v3.1.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
 [![Cloud Run](https://img.shields.io/badge/Cloud_Run-Live-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://bike-demand-api-76372oragq-uc.a.run.app)
 [![GBFS Poller](https://img.shields.io/badge/GBFS_Poller-Paused-lightgrey?style=for-the-badge&logo=googlecloud&logoColor=white)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
@@ -80,7 +82,7 @@ It implements:
 | Validation | Pydantic v2 | Strict request schema validation at the API boundary |
 | ASGI Server | uvicorn | Production-grade ASGI server for FastAPI |
 | Containerisation | Docker + Docker Compose | python:3.11-slim image; all 6 city models baked into image at build time |
-| Testing | pytest + httpx + anyio | Schema guard, RMSE gates (6 cities), routing guarantee, async API tests |
+| Testing | pytest + httpx + anyio | Schema guard, RMSE + model-size gates (6 cities), routing guarantee, async API tests |
 | Linting / CI | ruff + GitHub Actions | Lint → test → docker build → RMSE accuracy gates (Job 6) on push to main |
 | Experiment Tracking | MLflow *(v4.0.0)* | GCS-backed run tracking, model registry, RMSE gate |
 | ML Platform | Vertex AI *(v4.0.0)* | Managed CustomJob for weekly hyperparameter sweep |
@@ -154,7 +156,7 @@ bike-demand-ml-system/
 │
 ├── models/
 │   ├── features.py                     ← shared feature pipeline (used by train + predict)
-│   ├── train.py                        ← training CLI: --city, --data; saves to artifacts/<city>/
+│   ├── train.py                        ← training CLI: --city, --data; per-city forest_settings(); saves to artifacts/<city>/
 │   ├── predict.py                      ← inference pipeline: load_artifacts(city), predict()
 │   ├── __init__.py
 │   └── artifacts/                      ← per-city artifact directories (gitignored)
@@ -175,7 +177,8 @@ bike-demand-ml-system/
 │   ├── conftest.py                     ← anyio asyncio backend fixture for async tests
 │   ├── test_features.py                ← unit tests: temporal extraction, one-hot, frozen schema guard
 │   ├── test_api.py                     ← integration tests: 200/422 via httpx.AsyncClient
-│   ├── test_model_accuracy.py          ← RMSE gate tests: per-city accuracy assertions (slow, CI Job 6)
+│   ├── test_model_accuracy.py          ← RMSE + model-size gates: per-city accuracy and size assertions (slow, CI Job 6)
+│   ├── test_fetch_seoul.py             ← Seoul source fetch: annual/monthly CSV globbing + re-run guard against double counting
 │   ├── test_routing.py                 ← routing tests: no-fallback guarantee for Paris/Chicago/NYC/DC
 │   ├── test_pipeline.py                ← Dataflow pipeline tests: DoFn unit + DirectRunner end-to-end (needs requirements-pipeline.txt)
 │   ├── test_window_agg.py              ← v3.1.0 poller: 5-min window aggregator unit tests (avg/min/max, multi-city, rounding)
@@ -274,7 +277,7 @@ curl -X POST http://127.0.0.1:8000/predict \
   }'
 ```
 
-Expected response: `{"predictions": [1570.26]}`
+Expected response: `{"predictions": [1557.20]}`
 
 > **`city`** is optional — defaults to `"Seoul"` if omitted. Pass `"city": "London"`, `"city": "nyc"`, `"city": "Paris"`, `"city": "Chicago"`, or `"city": "Washington DC"` to route to per-city artifacts. Unknown cities fall back to Seoul.
 
@@ -420,14 +423,15 @@ python models/train.py
 pytest tests/
 ```
 
-The suite has eight modules (66 tests) across three tiers — 40 for the ML inference API and 26 for the `cost-audit` service:
+The suite has nine modules (72 tests) across three tiers — 46 for the ML inference API and data fetchers, and 26 for the `cost-audit` service:
 
 | Module | Type | What it covers |
 |---|---|---|
 | `tests/test_features.py` | Unit | Temporal extraction, one-hot encoding, frozen schema guard (`test_feature_schema_is_frozen` — fails with retrain instructions if the column set changes) |
 | `tests/test_api.py` | Integration | `httpx.AsyncClient` against the live ASGI app: 200 for single record, 200 for batch, 422 for wrong type, 422 for missing required field |
 | `tests/test_routing.py` | Unit | No-fallback guarantee: Paris/Chicago/NYC/DC route to their own artifacts; unknown city falls back to Seoul |
-| `tests/test_model_accuracy.py` | Accuracy | Per-city RMSE gates (6 cities): trains a fresh RF from the committed CSV, asserts RMSE < threshold. Marked `@pytest.mark.slow` — runs only in CI Job 6 |
+| `tests/test_model_accuracy.py` | Accuracy + size | Per-city gates (6 cities): trains a fresh RF from the committed CSV with the same `forest_settings()` the image uses, asserts RMSE < threshold **and** saved model size ≤ budget (25 MB; Paris 70 MB) so all six fit in the 512 MiB API. Marked `@pytest.mark.slow` — runs only in CI Job 6 |
+| `tests/test_fetch_seoul.py` | Unit | Seoul source fetch: annual and monthly CSV layouts are both found, intermediate files are ignored, re-run guard prevents double counting |
 | `tests/test_pipeline.py` | Unit + Pipeline | Legacy Dataflow path: GBFS/TFL snapshot schema, ParseMessage DoFn, DirectRunner end-to-end; auto-skipped unless `requirements-pipeline.txt` is installed |
 | `tests/test_window_agg.py` | Unit | v3.1.0 poller: 5-minute window aggregator — empty input, single snapshot degenerate stats, multi-snapshot avg/min/max, multi-city/station keying, 2-decimal rounding parity with the Dataflow path |
 | `tests/test_gbfs_poller_service.py` | Unit | v3.1.0 poller: FastAPI service contract — health endpoint, poller trigger response shape |
@@ -455,24 +459,26 @@ CI runs lint → pytest (fast) → docker build → push to GHCR on every push t
 
 Artifacts stored at `models/artifacts/<city>/` — train each city with `python -m models.train --city <name> --data <path>`.
 
-All RMSEs use a chronological 80/20 split (oldest 80% → train, newest 20% → test), matching `train.py` exactly.
+All RMSEs use a chronological 80/20 split (oldest 80% → train, newest 20% → test), matching `train.py` exactly. Figures are for the v4.5.1 size-capped models; the unlimited v4.5.0 models are shown for comparison.
 
-| City | Dataset | Rows | RMSE (bikes/hr) | Top Feature | Status |
-|------|---------|------|-----------------|-------------|--------|
-| Seoul | Seoul OA-15182 + Open-Meteo | 35,063 | **1,386.77** | HOUR (0.47) | ✅ Trained |
-| London | Kaggle London Bike Sharing | 17,414 | **316.56** | HOUR (0.71) | ✅ Trained |
-| NYC | BigQuery `new_york_citibike` + Open-Meteo | 34,187 | **470.76** | HOUR (0.52) | ✅ Trained |
-| Washington DC | Capital Bikeshare CSVs + Open-Meteo | 37,663 | **119.31** | HOUR (0.62) | ✅ Trained |
-| Paris | Vélib' Métropole open data (MEAN scale) + Open-Meteo | 17,539 | **20.51** | HOUR (0.71) | ✅ Trained |
-| Chicago | Divvy Bikes CSVs + Open-Meteo | 32,720 | **202.99** | HOUR (0.39) | ✅ Trained |
+| City | Dataset | Rows | RMSE (bikes/hr) | v4.5.0 RMSE | Model size | Top Feature | Status |
+|------|---------|------|-----------------|-------------|-----------|-------------|--------|
+| Seoul | Seoul OA-15182 + Open-Meteo | 35,063 | **1,363.03** | 1,386.77 | 255 MB → 20 MB | HOUR (0.48) | ✅ Trained |
+| London | Kaggle London Bike Sharing | 17,414 | **312.75** | 316.56 | 125 MB → 10 MB | HOUR (0.72) | ✅ Trained |
+| NYC | BigQuery `new_york_citibike` + Open-Meteo | 34,187 | **469.26** | 470.76 | 245 MB → 20 MB | HOUR (0.53) | ✅ Trained |
+| Washington DC | Capital Bikeshare CSVs + Open-Meteo | 37,663 | **119.54** | 119.31 | 261 MB → 22 MB | HOUR (0.64) | ✅ Trained |
+| Paris | Vélib' Métropole open data (MEAN scale) + Open-Meteo | 17,539 | **20.59** | 20.51 | 108 MB → 61 MB | HOUR (0.72) | ✅ Trained |
+| Chicago | Divvy Bikes CSVs + Open-Meteo | 32,720 | **200.69** | 202.99 | 231 MB → 19 MB | HOUR (0.40) | ✅ Trained |
 
-NYC is the most hour-driven city after DC and Paris — HOUR accounts for 52% of feature importance, reflecting New York's dense commuter cycling pattern. Higher RMSE vs Seoul/London/DC reflects NYC's larger absolute trip volumes.
+**Model size (v4.5.1):** unlimited 100-tree forests grew one leaf per training row and reached ~1.2 GB for six cities, which crashed the 512 MiB Cloud Run instance on every `/predict`. `forest_settings()` in `models/train.py` now trains 50 trees with at least 5 rows per leaf (Paris: 100 trees, depth ≤ 15, because its small normalised values lose the most from coarser leaves). Measured locally with all six loaded in one API process: peak 345 MiB. The coarser leaves also regularise the forest, which is why four cities got slightly more accurate.
 
-London's model is dominated by HOUR (0.71), reflecting London's strong commuter cycling pattern. Missing columns (VISIBILITY, DEW_POINT_TEMPERATURE, SOLAR_RADIATION) were zeroed — sourcing these would likely reduce RMSE further.
+NYC is the most hour-driven city after DC and Paris — HOUR accounts for 53% of feature importance, reflecting New York's dense commuter cycling pattern. Higher RMSE vs Seoul/London/DC reflects NYC's larger absolute trip volumes.
 
-Washington DC's RMSE of 119.31 is among the lowest — Capital Bikeshare is a smaller system than NYC, so absolute hourly counts are lower. HOUR dominates (0.62), consistent with a strong commuter pattern.
+London's model is dominated by HOUR (0.72), reflecting London's strong commuter cycling pattern. Missing columns (VISIBILITY, DEW_POINT_TEMPERATURE, SOLAR_RADIATION) were zeroed — sourcing these would likely reduce RMSE further.
 
-Paris RMSE (20.51) is low because the Vélib' source data uses a normalised MEAN station counter (individual station average ~50–500 bikes/hr), not city-wide summed volume. The v4.3.0 timezone fix (mirroring the Seoul precedent) aligned trips to Paris-local wall-clock time so the join with Open-Meteo weather is hour-accurate; the same release dropped 2022 source data as a data-quality gate after the export was found to peak 2h later than 2023+2024 in both AM and PM rush across DST seasons (an intrinsic provider-side aggregation difference). HOUR dominance rose to 0.71 — the same family of commuter-driven patterns seen in London (0.71), DC (0.62), NYC (0.52), and Seoul (0.47).
+Washington DC's RMSE of 119.54 is among the lowest — Capital Bikeshare is a smaller system than NYC, so absolute hourly counts are lower. HOUR dominates (0.64), consistent with a strong commuter pattern.
+
+Paris RMSE (20.59) is low because the Vélib' source data uses a normalised MEAN station counter (individual station average ~50–500 bikes/hr), not city-wide summed volume. The v4.3.0 timezone fix (mirroring the Seoul precedent) aligned trips to Paris-local wall-clock time so the join with Open-Meteo weather is hour-accurate; the same release dropped 2022 source data as a data-quality gate after the export was found to peak 2h later than 2023+2024 in both AM and PM rush across DST seasons (an intrinsic provider-side aggregation difference). HOUR dominance is 0.72 — the same family of commuter-driven patterns seen in London (0.72), DC (0.64), NYC (0.53), and Seoul (0.48).
 
 See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL + `data/fetch_nyc_weather.py` / `data/fetch_dc_weather.py` for the Open-Meteo join scripts.
 
@@ -480,10 +486,10 @@ See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL +
 
 | Metric | Value |
 |---|---|
-| Algorithm | Random Forest Regressor (`n_estimators=100`, `random_state=42`) |
-| RMSE | **1,386.77** |
-| MAE | **828.77** |
-| MSE | 2,260,563.09 |
+| Algorithm | Random Forest Regressor (`n_estimators=50`, `min_samples_leaf=5`, `random_state=42`) |
+| RMSE | **1,363.03** |
+| MAE | **761.23** |
+| MSE | 1,857,842.11 |
 | Train / Test split | Chronological 80/20 — oldest 80% → train, newest 20% → test |
 | Train / Test rows | 28,050 / 7,013 |
 | Data source | Seoul OpenData OA-15182 따릉이 per-trip log + Open-Meteo historical weather (Jan 2022 – Dec 2025) |
@@ -493,27 +499,27 @@ See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL +
 
 | Rank | Feature | Importance |
 |---|---|---|
-| 1 | `HOUR` | 0.468 |
-| 2 | `TEMPERATURE` | 0.152 |
-| 3 | `RAINFALL` | 0.089 |
-| 4 | `dayofweek` | 0.076 |
-| 5 | `SOLAR_RADIATION` | 0.072 |
-| 6 | `SEASONS_Winter` | 0.040 |
-| 7 | `DEW_POINT_TEMPERATURE` | 0.025 |
-| 8 | `WIND_SPEED` | 0.020 |
-| 9 | `HUMIDITY` | 0.019 |
-| 10 | `day` | 0.014 |
+| 1 | `HOUR` | 0.481 |
+| 2 | `TEMPERATURE` | 0.162 |
+| 3 | `RAINFALL` | 0.099 |
+| 4 | `dayofweek` | 0.079 |
+| 5 | `SOLAR_RADIATION` | 0.075 |
+| 6 | `DEW_POINT_TEMPERATURE` | 0.018 |
+| 7 | `SEASONS_Winter` | 0.017 |
+| 8 | `year` | 0.017 |
+| 9 | `HUMIDITY` | 0.015 |
+| 10 | `WIND_SPEED` | 0.013 |
 
-**Key insight surfaced by the model:** `HOUR` dominates the forecast (0.47), with `TEMPERATURE` (0.15) and `RAINFALL` (0.09) the strongest weather signals — a different shape from the prior UCI 2017–2018 baseline (TEMPERATURE 0.40, HOUR 0.29), which captured a single year of a then-young system. The new 4-year window (2022–2025) reflects a mature, commuter-driven Seoul fleet at ~7× the previous trip volume, so the hour-of-day signal dominates the same way it does in NYC (HOUR 0.52), DC (HOUR 0.62), and London (HOUR 0.71). `VISIBILITY` drops out of the top 10 because Open-Meteo returns a near-constant value (2000) for Seoul — the Random Forest correctly identifies it as non-informative.
+**Key insight surfaced by the model:** `HOUR` dominates the forecast (0.48), with `TEMPERATURE` (0.16) and `RAINFALL` (0.10) the strongest weather signals — a different shape from the prior UCI 2017–2018 baseline (TEMPERATURE 0.40, HOUR 0.29), which captured a single year of a then-young system. The new 4-year window (2022–2025) reflects a mature, commuter-driven Seoul fleet at ~7× the previous trip volume, so the hour-of-day signal dominates the same way it does in NYC (HOUR 0.53), DC (HOUR 0.64), and London (HOUR 0.72). `VISIBILITY` drops out of the top 10 because Open-Meteo returns a near-constant value (2000) for Seoul — the Random Forest correctly identifies it as non-informative.
 
 ### NYC — Random Forest Regressor
 
 | Metric | Value |
 |---|---|
-| Algorithm | Random Forest Regressor (`n_estimators=100`, `random_state=42`) |
-| RMSE | **470.76** |
-| MAE | **246.02** |
-| MSE | 221,610.72 |
+| Algorithm | Random Forest Regressor (`n_estimators=50`, `min_samples_leaf=5`, `random_state=42`) |
+| RMSE | **469.26** |
+| MAE | **245.73** |
+| MSE | 220,202.01 |
 | Train / Test split | Chronological 80/20 — oldest 80% → train, newest 20% → test |
 | Train / Test rows | 27,349 / 6,838 |
 | Data source | BigQuery `new_york_citibike.citibike_trips` (2014–2018) + Open-Meteo historical weather |
@@ -523,27 +529,27 @@ See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL +
 
 | Rank | Feature | Importance |
 |---|---|---|
-| 1 | `HOUR` | 0.517 |
-| 2 | `TEMPERATURE` | 0.180 |
-| 3 | `year` | 0.116 |
+| 1 | `HOUR` | 0.531 |
+| 2 | `TEMPERATURE` | 0.183 |
+| 3 | `year` | 0.119 |
 | 4 | `dayofweek` | 0.080 |
-| 5 | `RAINFALL` | 0.030 |
-| 6 | `HUMIDITY` | 0.022 |
-| 7 | `month` | 0.013 |
-| 8 | `WIND_SPEED` | 0.011 |
-| 9 | `day` | 0.011 |
-| 10 | `DEW_POINT_TEMPERATURE` | 0.011 |
+| 5 | `RAINFALL` | 0.028 |
+| 6 | `HUMIDITY` | 0.018 |
+| 7 | `month` | 0.015 |
+| 8 | `DEW_POINT_TEMPERATURE` | 0.007 |
+| 9 | `day` | 0.007 |
+| 10 | `WIND_SPEED` | 0.006 |
 
-**Key insight:** NYC's HOUR dominance (0.52 vs 0.29 for Seoul) reflects the intensity of New York's commuter cycling peaks. `year` ranks 3rd (0.12) — a strong growth trend as Citi Bike expanded from 2014 to 2018 — which Seoul and London don't show as prominently.
+**Key insight:** NYC's HOUR dominance (0.53 vs 0.29 for the old UCI Seoul baseline) reflects the intensity of New York's commuter cycling peaks. `year` ranks 3rd (0.12) — a strong growth trend as Citi Bike expanded from 2014 to 2018 — which Seoul and London don't show as prominently.
 
 ### Washington DC — Random Forest Regressor
 
 | Metric | Value |
 |---|---|
-| Algorithm | Random Forest Regressor (`n_estimators=100`, `random_state=42`) |
-| RMSE | **119.31** |
-| MAE | **67.75** |
-| MSE | 14,234.62 |
+| Algorithm | Random Forest Regressor (`n_estimators=50`, `min_samples_leaf=5`, `random_state=42`) |
+| RMSE | **119.54** |
+| MAE | **66.56** |
+| MSE | 14,289.51 |
 | Train / Test split | Chronological 80/20 — oldest 80% → train, newest 20% → test |
 | Train / Test rows | 30,130 / 7,533 |
 | Data source | Capital Bikeshare CSVs (2014–2018) + Open-Meteo historical weather |
@@ -553,18 +559,18 @@ See `data/prepare_city_data.py` for London column-mapping and NYC BigQuery SQL +
 
 | Rank | Feature | Importance |
 |---|---|---|
-| 1 | `HOUR` | 0.614 |
-| 2 | `TEMPERATURE` | 0.165 |
-| 3 | `dayofweek` | 0.070 |
-| 4 | `HUMIDITY` | 0.038 |
-| 5 | `month` | 0.024 |
-| 6 | `RAINFALL` | 0.022 |
-| 7 | `WIND_SPEED` | 0.015 |
-| 8 | `year` | 0.014 |
-| 9 | `DEW_POINT_TEMPERATURE` | 0.013 |
-| 10 | `day` | 0.009 |
+| 1 | `HOUR` | 0.635 |
+| 2 | `TEMPERATURE` | 0.178 |
+| 3 | `dayofweek` | 0.085 |
+| 4 | `HUMIDITY` | 0.034 |
+| 5 | `RAINFALL` | 0.021 |
+| 6 | `year` | 0.017 |
+| 7 | `day` | 0.007 |
+| 8 | `DEW_POINT_TEMPERATURE` | 0.007 |
+| 9 | `WIND_SPEED` | 0.007 |
+| 10 | `month` | 0.006 |
 
-**Key insight:** DC's RMSE (119.31) is the lowest across all cities because Capital Bikeshare's hourly volumes are smaller than NYC's, making the absolute error lower. HOUR dominates even more strongly (0.62) — DC's commuter pattern is highly regular. `year` ranks 8th (0.01), unlike NYC's 3rd (0.12), because DC's system was already mature by 2014.
+**Key insight:** DC's RMSE (119.54) is the lowest among the city-wide-volume models (Paris uses a normalised per-station scale) because Capital Bikeshare's hourly volumes are smaller than NYC's, making the absolute error lower. HOUR dominates even more strongly (0.64) — DC's commuter pattern is highly regular. `year` ranks 6th (0.02), unlike NYC's 3rd (0.12), because DC's system was already mature by 2014.
 
 ---
 
@@ -574,10 +580,10 @@ End-to-end verification against a freshly trained model running behind `uvicorn`
 
 | Scenario | Input | Predicted Demand |
 |---|---|---|
-| Single record — winter 8 AM | `TEMP=-5.2`, `HOUR=8`, `SEASONS=Winter` | **1570.26** bikes |
-| Batch — summer rush hour | `HOUR=18`, `SEASONS=Summer`, `TEMP=24.3` | **16731.78** bikes |
-| Batch — summer 03:00 | `HOUR=3`, `SEASONS=Summer`, `TEMP=18.2` | **1066.15** bikes |
-| Malformed input | `HOUR="not-an-int"` | **HTTP 422** (Pydantic validation rejected) |
+| Single record — winter 8 AM | `TEMP=-5.2`, `HOUR=8`, `SEASONS=Winter` | **1557.20** bikes (v4.5.1 model; 1570.26 on v4.5.0) |
+| Batch — summer rush hour | `HOUR=18`, `SEASONS=Summer`, `TEMP=24.3` | **16731.78** bikes (measured on the v4.5.0 model) |
+| Batch — summer 03:00 | `HOUR=3`, `SEASONS=Summer`, `TEMP=18.2` | **1066.15** bikes (measured on the v4.5.0 model) |
+| Malformed input | `HOUR="not-an-int"` | **HTTP 422** (Pydantic validation rejected; re-checked on v4.5.1) |
 
 The ~16× spread between summer rush and middle-of-night confirms the model captures the strong hour-of-day signal seen in feature importances, and the Pydantic 422 confirms the API boundary rejects invalid types before they reach the model.
 
@@ -605,6 +611,7 @@ The ~16× spread between summer rush and middle-of-night confirms the model capt
 - ~~No experiment tracking (MLflow / Vertex AI)~~ — **v4.0.0 shipped:** `pipeline/retrain_job.py` weekly sweep + GCS-backed MLflow + RMSE gate; **4 of 6 cities** live in MLflow Production registry (Seoul / London / NYC / DC). Paris and Chicago were open promotion candidates. *(Deactivated June 2026 — portfolio mode; GCS mlflow/ prefix deleted, Cloud Scheduler removed. Re-enable by redeploying `bike-demand-trigger` and restoring the cron.)* ✅
 - **Paris 2022 source export dropped as a data-quality gate** — the 2022 export from opendata.paris.fr peaks 2h later than 2023+2024 in both AM and PM rush hours and is DST-consistent within 2022, ruling out timezone-encoding causes (the parser is correct; the source aggregation is anomalous). 33% of available Paris source rows filtered out in v4.3.0 via a single reversible block in `data/fetch_paris_weather.py`. Root cause is intrinsic to the provider's internal aggregation pipeline and not user-fixable; revisit if upstream ever publishes a correction.
 - **No automated drift monitoring on inference inputs yet** — there is no scheduled job that compares live weather distributions against the training baseline. Targeted in v4.6.0.
+- ~~API instance ran out of memory on every `/predict`~~ — unlimited forests needed 515–766 MiB in a 512 MiB Cloud Run instance, so each request killed the instance and the next one cold-started (3–8 s per city). **v4.5.1:** size-capped forests (~146 MB for six), peak 345 MiB, guarded by a CI size gate ✅
 - No request authentication or rate-limiting on the API. Production option: Google Cloud API Gateway with API keys in front of Cloud Run, plus Cloud Armor rate limiting
 - ~~No structured logging or observability hooks~~ — structured JSON → Cloud Logging + Prometheus `/metrics` shipped in v2.1.0 ✅
 - ~~Dataflow streaming pipeline has no always-free tier (~$0.05/hr on e2-medium) — run only for demos~~ — **Superseded 2026-05-25 by v3.1.0:** Cloud Run `gbfs-poller` + Cloud Scheduler (every 5 min) + BigQuery 7-day partitioned `station_snapshots` table replaces the Dataflow path at zero always-free-tier cost ✅
@@ -719,6 +726,13 @@ A daily read-only audit that catches resource accumulation (registry bloat, forg
 - [x] GCP provisioned — private `cost-audit` Cloud Run service (`maxScale=1`, read-only `cost-audit-sa`); `cost-audit-cron` Cloud Scheduler (daily 09:00 UTC, OIDC); Slack webhook URL in Secret Manager
 - [x] Cost-safety — Scheduler-triggered (not Pub/Sub-push, structurally avoids the kill-switch retry-storm); all free-tier reads; no Cloud Monitoring custom-metric writes; ~450 vCPU-sec/month vs 180k free
 - [x] End-to-end verified — live run tripped 2 real registry-bloat thresholds and delivered the alert to Slack; delivery switched email → Slack incoming webhook (Microsoft app passwords require 2FA + consumer Outlook SMTP basic-auth is deprecated)
+
+### v4.5.1 — Cloud Run Memory Fix ✅ Done (2026-11-26)
+
+- [x] Root cause from Cloud Run logs: "Memory limit of 512 MiB exceeded with 515–766 MiB used" on every `/predict`; each request restarted the instance (≈40 s for the Shiny app's six city calls)
+- [x] `models/train.py` — `forest_settings(city)`: 50 trees + 5-row leaf minimum (Paris: 100 trees, depth ≤ 15); six models ~1.2 GB → ~146 MB; RMSE equal or better in 4 of 6 cities, Paris +0.4%, DC +0.2%
+- [x] `tests/test_model_accuracy.py` — gates use the same `forest_settings()` and add a per-city model-size budget (25 MB; Paris 70 MB)
+- [x] Memory stays at 512 MiB, so no extra Cloud Run cost; all six loaded in one API process peak at 345 MiB locally
 
 ### Phase 7 — Automated Test Suite ✅ Done (2026-05-18)
 

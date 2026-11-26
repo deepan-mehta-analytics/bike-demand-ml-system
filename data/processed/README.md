@@ -12,7 +12,7 @@ These six files share an identical 14-column Seoul schema and are passed directl
 
 | File | City | Rows | Source | How to regenerate |
 |---|---|---|---|---|
-| `seoul_bike_sharing.csv` | Seoul | 26,303 | `data/raw/seoul/seoul_joined.csv` | `python -m data.fetch_seoul_weather` |
+| `seoul_bike_sharing.csv` | Seoul | 35,063 | `data/raw/seoul/seoul_joined.csv` (Jan 2022 – Dec 2025, refreshed in v4.5.0) | `python -m data.fetch_seoul_weather` |
 | `london_bike_sharing.csv` | London | 17,414 | `data/raw/london/london_merged.csv` | `prepare_city_data.prepare_london()` |
 | `nyc_bike_sharing.csv` | NYC | 34,187 | `data/raw/nyc/nyc_joined.csv` | `python -m data.fetch_nyc_weather` |
 | `dc_bike_sharing.csv` | Washington DC | 37,663 | `data/raw/dc/dc_joined.csv` | `python data/fetch_dc_weather.py` |
@@ -48,9 +48,11 @@ These files were produced during the original R-based Seoul analysis and are ret
 - Regenerate by running the relevant fetch/prepare script (see table above)
 - Training commands:
   ```
+  python -m models.train --city seoul   --data data/processed/seoul_bike_sharing.csv
   python -m models.train --city london  --data data/processed/london_bike_sharing.csv
   python -m models.train --city nyc     --data data/processed/nyc_bike_sharing.csv
   python -m models.train --city dc      --data data/processed/dc_bike_sharing.csv
   python -m models.train --city paris   --data data/processed/paris_bike_sharing.csv
   python -m models.train --city chicago --data data/processed/chicago_bike_sharing.csv
   ```
+- Tree count and size limits come from `forest_settings()` in `models/train.py` (v4.5.1), so these commands produce the same size-capped models the Docker image bakes in

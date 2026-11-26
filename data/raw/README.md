@@ -9,7 +9,8 @@ Source files for each city's bike demand training pipeline. Files are preserved 
 ```
 data/raw/
 ├── seoul/
-│   ├── YYYY-MM.csv                  ← OA-15182 per-trip monthly CSVs (cp949, ~640 MB each, gitignored)
+│   ├── YYYY-MM.csv                  ← OA-15182 per-trip monthly CSVs 2022–2024 (cp949, ~640 MB each, gitignored)
+│   ├── 2025/                        ← 2025 monthly CSVs in the newer per-year folder layout (gitignored)
 │   ├── seoul_trips_hourly.csv       ← hourly trip counts aggregated from the monthly CSVs
 │   ├── seoul_weather.csv            ← Open-Meteo historical weather for Seoul
 │   └── seoul_joined.csv             ← trips + weather joined on DATE + HOUR
@@ -45,8 +46,8 @@ data/raw/
 ### Seoul — `seoul/`
 
 - **Source:** [Seoul Open Data Plaza — 따릉이 대여이력 (OA-15182)](https://data.seoul.go.kr/dataList/OA-15182/F/1/datasetView.do) + Open-Meteo historical API
-- **Coverage:** Jan 2022 – Dec 2024 (26,303 hourly rows after join)
-- **Raw monthly CSVs** — 36 files named `YYYY-MM.csv` (cp949-encoded per-trip logs, ~23 GB total); downloaded as annual ZIPs from data.seoul.go.kr and gitignored
+- **Coverage:** Jan 2022 – Dec 2025 (35,063 hourly rows after join; 2025 added in v4.5.0)
+- **Raw monthly CSVs** — 48 monthly per-trip logs (cp949-encoded, ~31 GB total): 2022–2024 as `YYYY-MM.csv` at the folder root, 2025 in the `2025/` subfolder; downloaded as annual ZIPs from data.seoul.go.kr and gitignored. The fetch script finds both layouts and has a re-run guard against double counting
 - **`seoul_trips_hourly.csv`** — aggregated hourly trip counts; columns: DATE (DD/MM/YYYY), HOUR, RENTED_BIKE_COUNT
 - **`seoul_weather.csv`** — Open-Meteo archive (lat=37.57, lng=126.98, timezone=Asia/Seoul); columns: DATE, HOUR + 7 weather variables
 - **`seoul_joined.csv`** — inner join of the above two files on DATE + HOUR
@@ -87,7 +88,7 @@ data/raw/
 - **`paris_weather.csv`** — Open-Meteo archive (lat=48.8566, lng=2.3522, timezone=Europe/Paris)
 - **`paris_joined.csv`** — inner join of counter + weather on DATE + HOUR
 - Regenerate with: `python -m data.fetch_paris_weather`
-- **Note on scale:** Paris uses MEAN counter values, not raw station sums — RMSE of 20.51 bikes/hr (post-v4.3.0; was 23.30 in v1.4.0 baseline) is correct for this normalised scale (~50–500/hr range), not directly comparable to other cities' raw counts.
+- **Note on scale:** Paris uses MEAN counter values, not raw station sums — RMSE of 20.59 bikes/hr (post-v4.5.1 size cap; 20.51 post-v4.3.0; was 23.30 in v1.4.0 baseline) is correct for this normalised scale (~50–500/hr range), not directly comparable to other cities' raw counts.
 - **Option B 2022 drop (v4.3.0):** the 2022 export from opendata.paris.fr peaks 2h later than 2023+2024 in both AM and PM rush hours and is DST-consistent within 2022 — an intrinsic provider-side aggregation anomaly, not a timezone parser bug on our side. The fetch script (`data/fetch_paris_weather.py:135-149`) filters 2022 rows out at the post-concat stage as a data-quality gate. Reversible by removing that single block if upstream ever publishes a correction.
 
 ### Chicago — `chicago/`

@@ -116,7 +116,10 @@ def train(city: str, data_path: str, n_estimators: int | None, random_state: int
 
     # ── Persist Model ────────────────────────────────────────────────────────
     model_path = os.path.join(artifact_dir, "random_forest_model.pkl") # full path for model artifact
-    joblib.dump(model, model_path)                                     # serialise trained model to disk
+    # zlib level 3: files ~4x smaller (153 -> 38 MB for six cities), identical trees, +0.1 s load.
+    # Cloud Run's gen1 sandbox counts cached file data toward the 512 MiB limit, so smaller files
+    # leave more room for the loaded models. Artifacts are our own build output (trusted pickle).
+    joblib.dump(model, model_path, compress=3)                         # serialise trained model to disk, compressed
 
     # ── Evaluation ───────────────────────────────────────────────────────────
     preds = model.predict(X_test)                                      # generate predictions on held-out test set

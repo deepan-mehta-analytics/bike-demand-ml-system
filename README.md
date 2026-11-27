@@ -9,7 +9,7 @@ This project started as the **Python ML backend** for a companion R Shiny capsto
 - **Multi-city Random Forest inference API** — per-city RF models for all 6 cities (Seoul, London, NYC, Washington DC, Paris, Chicago) served via a Pydantic-validated `/predict` endpoint on GCP Cloud Run; lazy-loaded singleton service layer decouples business logic from the API surface; train/serve feature schema persisted via `joblib` to prevent skew. Since v4.5.1 the six models are size-capped per city (~146 MB together, ~8× smaller) so they all fit in one 512 MiB instance, with equal or better RMSE in 4 of 6 cities, and a CI gate fails any model that grows back.
 - **Vertex AI managed retraining** — a `bike-demand-trigger` Cloud Run service submitted a 6-combo hyperparameter sweep to Vertex AI every Sunday; results tracked in SQLite + GCS-backed MLflow; a 3% RMSE gate enforced model quality before any city model was promoted to the Production registry. *(Deactivated June 2026 — portfolio mode; static models are sufficient for demos. Re-enable by redeploying `bike-demand-trigger` and restoring the Cloud Scheduler cron.)*
 - **Per-city data pipelines** — Open-Meteo historical API + GBFS open data fetchers for each city; Seoul rebuilt to a 4-year OA-15182 hourly scope (v4.2.0 → refreshed 2026-06-02, 35,063 rows, RMSE 1,386.77); Paris re-aligned to wall-clock-local time with a 2022 anomaly data-quality drop (v4.3.0, RMSE 20.51). GBFS live station feed live again since 2026-11-27 (paused June–November for zero cost) with hard runaway limits and daily cost-audit alerts.
-- **CI-enforced accuracy gates** — 109-test pytest suite (46 ML inference + data + 63 cost-audit): schema guards, per-city RMSE + model-size gates, no-fallback routing guarantees, Dataflow pipeline contracts, GBFS 5-min window aggregator unit tests, and GCP resource health checks; enforced on every push via GitHub Actions.
+- **CI-enforced accuracy gates** — 111-test pytest suite (48 ML inference + data + 63 cost-audit): schema guards, per-city RMSE + model-size gates, no-fallback routing guarantees, Dataflow pipeline contracts, GBFS 5-min window aggregator unit tests, and GCP resource health checks; enforced on every push via GitHub Actions.
 
 **Engineering choices that signal the skills**
 
@@ -158,6 +158,7 @@ bike-demand-ml-system/
 │   ├── features.py                     ← shared feature pipeline (used by train + predict)
 │   ├── train.py                        ← training CLI: --city, --data; per-city forest_settings(); saves to artifacts/<city>/
 │   ├── predict.py                      ← inference pipeline: load_artifacts(city), predict()
+│   ├── export_feature_importance.py    ← writes reports/feature_importance.csv (per-city factor weights) for the Shiny "What drives demand" chart
 │   ├── __init__.py
 │   └── artifacts/                      ← per-city artifact directories (gitignored)
 │       ├── seoul/                      ← random_forest_model.pkl + feature_columns.pkl
@@ -166,6 +167,9 @@ bike-demand-ml-system/
 │       ├── dc/                         ← random_forest_model.pkl + feature_columns.pkl
 │       ├── paris/                      ← random_forest_model.pkl + feature_columns.pkl
 │       └── chicago/                    ← random_forest_model.pkl + feature_columns.pkl
+│
+├── reports/
+│   └── feature_importance.csv          ← per-city feature importances of the v4.5.1 models (one-hot columns summed), consumed by the Shiny dashboard
 │
 ├── services/
 │   └── predictor.py                    ← service layer: lazy singleton, decouples API from ML
@@ -180,6 +184,7 @@ bike-demand-ml-system/
 │   ├── test_model_accuracy.py          ← RMSE + model-size gates: per-city accuracy and size assertions (slow, CI Job 6)
 │   ├── test_fetch_seoul.py             ← Seoul source fetch: annual/monthly CSV globbing + re-run guard against double counting
 │   ├── test_routing.py                 ← routing tests: no-fallback guarantee for Paris/Chicago/NYC/DC
+│   ├── test_export_feature_importance.py ← one-hot folding + ordering for the feature-importance export
 │   ├── test_pipeline.py                ← Dataflow pipeline tests: DoFn unit + DirectRunner end-to-end (needs requirements-pipeline.txt)
 │   ├── test_window_agg.py              ← v3.1.0 poller: 5-min window aggregator unit tests (avg/min/max, multi-city, rounding)
 │   └── test_gbfs_poller_service.py     ← v3.1.0 poller: FastAPI service contract tests
@@ -423,7 +428,7 @@ python models/train.py
 pytest tests/
 ```
 
-The suite has nine modules (109 tests) across three tiers — 46 for the ML inference API and data fetchers, and 63 for the `cost-audit` service:
+The suite has ten modules (111 tests) across three tiers — 48 for the ML inference API, data fetchers and the feature-importance export, and 63 for the `cost-audit` service:
 
 | Module | Type | What it covers |
 |---|---|---|

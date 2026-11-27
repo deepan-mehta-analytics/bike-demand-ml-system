@@ -11,9 +11,14 @@ THRESHOLDS = {                                                          # single
         "bike-demand-api",                                              # inference API (portfolio demo endpoint)
         "billing-kill-switch",                                          # budget protection (europe-west1)
         "cost-audit",                                                   # this monitoring service
+        "gbfs-poller",                                                  # live station feed (restarted 2026-11-27)
     }),
     "spend_mtd_max_inr": 300.0,                                         # portfolio-mode target: ~₹80-120/month expected; 300 gives safe headroom before escalation
     "cloud_run_memory_errors_max": 0,                                   # any "Memory limit ... exceeded" in 24 h = instances are crashing (v4.5.1 lesson)
+    "gbfs_poller_expected_on": True,                                    # set False when pausing the poller on purpose (stops stale-feed alerts)
+    "gbfs_poller_max_requests_24h": 320,                                # schedule = 288/day; more means retries or extra triggers
+    "gbfs_poller_max_billed_seconds_24h": 2880,                         # ~10 s/poll average; normal ~4 s; free tier ends near ~19 s
+    "gbfs_poller_max_feed_age_minutes": 60,                             # newest data older than this = feed stopped silently
 }
 
 
@@ -104,6 +109,31 @@ def evaluate_thresholds(readings: dict) -> list:                        # evalua
                 "count": count,                                         # how many times in the window
                 "limit": THRESHOLDS["cloud_run_memory_errors_max"],     # the threshold that was exceeded
             })
+
+    # ── GBFS poller: runaway calls / runtime, silent stop ─────────────────────
+    poller = readings.get("gbfs_poller", {})                            # poller summary (absent if check not run)
+    if poller and "error" not in poller:                                # a failed check is reported below instead
+        if poller.get("requests", 0) > THRESHOLDS["gbfs_poller_max_requests_24h"]:  # too many calls
+            alerts.append({
+                "check": "gbfs_poller_requests",                        # discriminator key
+                "count": poller["requests"],                            # actual calls in 24 h
+                "limit": THRESHOLDS["gbfs_poller_max_requests_24h"],    # the threshold that was exceeded
+            })
+        if poller.get("billed_seconds", 0.0) > THRESHOLDS["gbfs_poller_max_billed_seconds_24h"]:  # runtime over budget
+            alerts.append({
+                "check": "gbfs_poller_runtime",                         # discriminator key
+                "billed_seconds": poller["billed_seconds"],             # total runtime in 24 h
+                "longest_seconds": poller.get("longest_seconds", 0.0),  # slowest call, hints at hangs
+                "limit": THRESHOLDS["gbfs_poller_max_billed_seconds_24h"],  # the threshold that was exceeded
+            })
+        if THRESHOLDS["gbfs_poller_expected_on"]:                       # only when the feed is meant to be running
+            age = poller.get("feed_age_minutes")                        # None = no recent data at all
+            if age is None or age > THRESHOLDS["gbfs_poller_max_feed_age_minutes"]:  # stale or missing
+                alerts.append({
+                    "check": "gbfs_poller_feed_stale",                  # discriminator key
+                    "age_minutes": age,                                 # minutes since newest data, or None
+                    "limit": THRESHOLDS["gbfs_poller_max_feed_age_minutes"],  # the threshold that was exceeded
+                })
 
     # ── Checks that could not run ─────────────────────────────────────────────
     # main.py stores {"error": ...} when a check raises. Silently skipping it made a

@@ -205,3 +205,67 @@ def check_cloud_run_memory_errors(project: str, hours: int = 24) -> dict:
 
     logger.info(f"Cloud Run memory errors ({hours} h): {counts or 'none'}")
     return {"memory_errors": counts}                                    # caller passes into evaluate_thresholds
+
+
+# ── GBFS poller: runaway cost + silent stop (Cloud Logging REST + BigQuery) ───
+# Restarted 2026-11-27. Before the May fix each poll ran ~248 s (~$46/month);
+# now ~4 s. This check catches a slide back (long or extra calls) and a feed
+# that stops writing data without any error.
+
+POLLER_SERVICE = "gbfs-poller"                                          # Cloud Run service name of the poller
+POLLER_TABLE = "bike_demand.station_snapshots"                          # dataset.table the poller loads into
+
+
+def check_gbfs_poller(project: str, hours: int = 24) -> dict:
+    """Summarise the poller's last `hours`: request count, total + longest latency, and data age.
+
+    Returns {"requests", "billed_seconds", "longest_seconds", "feed_age_minutes"};
+    feed_age_minutes is None when no rows arrived in the last two days.
+    Needs roles/logging.viewer and BigQuery dataViewer + jobUser (both already granted).
+    """
+    headers = _get_auth_headers()                                       # fresh Bearer token for the REST call
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")  # RFC 3339 lower bound
+    log_filter = (                                                      # Cloud Logging query language
+        'resource.type="cloud_run_revision" '                           # Cloud Run services only
+        f'AND resource.labels.service_name="{POLLER_SERVICE}" '          # the poller only
+        f'AND logName="projects/{project}/logs/run.googleapis.com%2Frequests" '  # request logs carry the latency
+        f'AND timestamp>="{since}"'                                     # only the audit window
+    )
+    request_count = 0                                                   # number of /poll calls seen
+    total_seconds = 0.0                                                 # summed latency ≈ billed CPU time (request-based billing)
+    longest = 0.0                                                       # slowest single call
+    page_token = None                                                   # no token for the first page
+    for _ in range(_MAX_LOG_PAGES):                                     # bounded paging so a log flood cannot stall the audit
+        body = {"resourceNames": [f"projects/{project}"], "filter": log_filter, "pageSize": 1000}  # request body
+        if page_token:                                                  # continue from the previous page
+            body["pageToken"] = page_token
+        resp = requests.post(_LOGGING_LIST_URL, headers=headers, json=body, timeout=30)  # read-only list call
+        resp.raise_for_status()                                         # surfaces as a failed check if denied
+        data = resp.json()                                              # parsed response body
+        for entry in data.get("entries", []):                           # one entry per request
+            latency = entry.get("httpRequest", {}).get("latency", "0s")  # e.g. "3.912s"
+            seconds = float(latency.rstrip("s") or 0)                   # strip the unit; empty → 0
+            request_count += 1                                          # count the call
+            total_seconds += seconds                                    # add its runtime
+            longest = max(longest, seconds)                             # keep the slowest
+        page_token = data.get("nextPageToken")                          # more pages?
+        if not page_token:                                              # done when the API returns no token
+            break
+
+    client = bigquery.Client(project=project)                           # uses ADC; SA has dataViewer + jobUser
+    query = f"""
+        SELECT TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), MAX(window_start), MINUTE) AS age_minutes
+        FROM `{project}.{POLLER_TABLE}`
+        WHERE _PARTITIONTIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 DAY)
+    """                                                                 # newest window's age; only 2 days of partitions scanned (free tier)
+    rows = list(client.query(query).result())                          # one row; age is NULL when no recent rows
+    age = rows[0]["age_minutes"] if rows else None                      # None = no recent data at all
+
+    logger.info(f"GBFS poller ({hours} h): {request_count} calls, {total_seconds:.0f} s total, "
+                f"longest {longest:.1f} s, newest data {age} min old")
+    return {
+        "requests": request_count,                                      # calls in the window
+        "billed_seconds": round(total_seconds, 1),                      # total runtime in the window
+        "longest_seconds": longest,                                     # slowest call
+        "feed_age_minutes": age,                                        # minutes since the newest window, or None
+    }

@@ -56,6 +56,24 @@ def format_alert_message(alerts: list) -> str:                          # conver
                 f"  • Cloud Run: `{alert['service']}` hit its memory limit {alert['count']} time(s) in 24 h "
                 f"(instances crash and restart; check `gcloud logging read` for \"Memory limit of\")"
             )                                                           # crash count with the log query to investigate
+        elif check == "gbfs_poller_requests":
+            lines.append(
+                f"  • GBFS poller: {alert['count']} calls in 24 h (limit {alert['limit']}; schedule is 288) "
+                f"— check `gcloud scheduler jobs describe gbfs-poller-cron` for retries or extra triggers"
+            )                                                           # too many calls
+        elif check == "gbfs_poller_runtime":
+            lines.append(
+                f"  • GBFS poller: {alert['billed_seconds']:.0f} s runtime in 24 h (budget {alert['limit']} s; "
+                f"longest call {alert['longest_seconds']:.0f} s) — pause with "
+                f"`gcloud scheduler jobs pause gbfs-poller-cron --location=us-central1`"
+            )                                                           # runtime over budget, with the stop command
+        elif check == "gbfs_poller_feed_stale":
+            age = alert["age_minutes"]                                  # None means no recent data at all
+            detail = "no data in the last 2 days" if age is None else f"newest data is {age} min old"
+            lines.append(
+                f"  • GBFS poller: feed stopped — {detail} (limit {alert['limit']} min). "
+                f"If paused on purpose, set gbfs_poller_expected_on=False in cost-audit/thresholds.py"
+            )                                                           # silent stop
         elif check == "check_failed":
             lines.append(
                 f"  • Audit check `{alert['label']}` could not run: {str(alert['error'])[:200]}"

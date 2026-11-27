@@ -401,6 +401,119 @@ def test_format_memory_error_and_check_failed_messages():
     assert "Unknown check" not in msg                                  # both have real formatter branches
 
 
+# ── GBFS poller runaway / silent-stop check (2026-11-27 restart) ─────────────
+from checks import check_gbfs_poller                                     # check under test  # noqa: E402
+
+
+def _request_entry(latency):                                            # helper — one fake Cloud Run request-log entry
+    """Return a minimal Cloud Run request log entry with the given latency string."""
+    return {"resource": {"labels": {"service_name": "gbfs-poller"}}, "httpRequest": {"latency": latency}}
+
+
+def _fake_bq_client(age_minutes):                                       # helper — BigQuery client whose query returns one age row
+    """Return a MagicMock bigquery.Client whose query().result() yields [{'age_minutes': age}]."""
+    client = MagicMock()                                                # stands in for bigquery.Client(...)
+    client.query.return_value.result.return_value = [{"age_minutes": age_minutes}]  # one row, like the real query
+    return client
+
+
+def test_check_gbfs_poller_sums_request_latency_and_reads_feed_age():
+    """Counts poller requests, sums and maxes their latency, and reports the newest data's age."""
+    page = MagicMock()                                                  # one page of request logs
+    page.json.return_value = {"entries": [_request_entry("3.5s"), _request_entry("4.5s")]}
+    with patch("checks.requests.post", return_value=page) as mock_post, \
+         patch("checks._get_auth_headers", return_value={"Authorization": "Bearer fake"}), \
+         patch("checks.bigquery.Client", return_value=_fake_bq_client(7)):
+        result = check_gbfs_poller("proj")
+
+    assert result == {"requests": 2, "billed_seconds": 8.0, "longest_seconds": 4.5, "feed_age_minutes": 7}
+    sent_filter = mock_post.call_args.kwargs["json"]["filter"]          # filter sent to the Logging API
+    assert 'resource.labels.service_name="gbfs-poller"' in sent_filter # only the poller service
+    assert "run.googleapis.com%2Frequests" in sent_filter               # only request logs (they carry latency)
+
+
+def test_check_gbfs_poller_reports_no_recent_data_as_none():
+    """No rows in the recent partitions -> feed_age_minutes is None (treated as stale)."""
+    page = MagicMock()                                                  # no requests at all
+    page.json.return_value = {}
+    with patch("checks.requests.post", return_value=page), \
+         patch("checks._get_auth_headers", return_value={"Authorization": "Bearer fake"}), \
+         patch("checks.bigquery.Client", return_value=_fake_bq_client(None)):
+        result = check_gbfs_poller("proj")
+
+    assert result == {"requests": 0, "billed_seconds": 0.0, "longest_seconds": 0.0, "feed_age_minutes": None}
+
+
+def _poller(**overrides):                                               # helper — healthy poller reading with overrides
+    """Return a healthy gbfs_poller reading (288 polls x ~4 s, fresh data) with selected fields replaced."""
+    reading = {"requests": 288, "billed_seconds": 1150.0, "longest_seconds": 6.0, "feed_age_minutes": 4}
+    reading.update(overrides)                                           # apply the test's changes
+    return reading
+
+
+def test_healthy_poller_no_alert(healthy_readings):
+    """Normal day: 288 polls, ~4 s each, data a few minutes old -> silent."""
+    healthy_readings["gbfs_poller"] = _poller()
+    assert evaluate_thresholds(healthy_readings) == []
+
+
+def test_poller_too_many_requests_trips_alert(healthy_readings):
+    """More calls than the 5-minute schedule allows (e.g. retries or extra triggers) alerts."""
+    healthy_readings["gbfs_poller"] = _poller(requests=900)
+    alerts = evaluate_thresholds(healthy_readings)
+    assert alerts == [{"check": "gbfs_poller_requests", "count": 900, "limit": 320}]
+
+
+def test_poller_long_runtime_trips_alert(healthy_readings):
+    """Total runtime above budget (slow feeds / hung calls) alerts before it leaves the free tier."""
+    healthy_readings["gbfs_poller"] = _poller(billed_seconds=9000.0, longest_seconds=60.0)
+    alerts = evaluate_thresholds(healthy_readings)
+    assert alerts == [{"check": "gbfs_poller_runtime", "billed_seconds": 9000.0, "longest_seconds": 60.0, "limit": 2880}]
+
+
+def test_poller_stale_feed_trips_alert(healthy_readings):
+    """Newest data older than the limit = the feed stopped silently."""
+    healthy_readings["gbfs_poller"] = _poller(feed_age_minutes=180)
+    alerts = evaluate_thresholds(healthy_readings)
+    assert alerts == [{"check": "gbfs_poller_feed_stale", "age_minutes": 180, "limit": 60}]
+
+
+def test_poller_missing_feed_trips_alert(healthy_readings):
+    """No recent data at all (age None) also counts as a stopped feed."""
+    healthy_readings["gbfs_poller"] = _poller(requests=0, billed_seconds=0.0, longest_seconds=0.0, feed_age_minutes=None)
+    alerts = evaluate_thresholds(healthy_readings)
+    assert alerts == [{"check": "gbfs_poller_feed_stale", "age_minutes": None, "limit": 60}]
+
+
+def test_poller_feed_check_skipped_when_deliberately_paused(healthy_readings, monkeypatch):
+    """With gbfs_poller_expected_on = False (poller paused on purpose) a missing feed is not an alert."""
+    import thresholds                                                   # module holding THRESHOLDS
+    monkeypatch.setitem(thresholds.THRESHOLDS, "gbfs_poller_expected_on", False)  # owner paused it
+    healthy_readings["gbfs_poller"] = _poller(requests=0, billed_seconds=0.0, longest_seconds=0.0, feed_age_minutes=None)
+    assert evaluate_thresholds(healthy_readings) == []
+
+
+def test_gbfs_poller_is_an_approved_cloud_run_service(healthy_readings):
+    """The restarted poller must not trip the unknown-service alert."""
+    healthy_readings["cloud_run"]["services"].append({"name": "gbfs-poller", "min_instances": 0})
+    assert evaluate_thresholds(healthy_readings) == []
+
+
+def test_format_gbfs_poller_messages():
+    """Each poller alert has its own readable line (no 'Unknown check' fallback)."""
+    msg = format_alert_message([
+        {"check": "gbfs_poller_requests", "count": 900, "limit": 320},
+        {"check": "gbfs_poller_runtime", "billed_seconds": 9000.0, "longest_seconds": 60.0, "limit": 2880},
+        {"check": "gbfs_poller_feed_stale", "age_minutes": 180, "limit": 60},
+        {"check": "gbfs_poller_feed_stale", "age_minutes": None, "limit": 60},
+    ])
+    assert "900" in msg and "320" in msg                               # request count vs limit
+    assert "9000" in msg and "2880" in msg                             # runtime vs budget
+    assert "180 min" in msg                                            # stale age shown
+    assert "no data" in msg.lower()                                    # missing feed explained
+    assert "Unknown check" not in msg                                  # every type has a formatter branch
+
+
 # ── main.py integration tests ─────────────────────────────────────────────────
 import importlib                                                        # used to reload main module after env var changes  # noqa: E402
 
@@ -416,6 +529,7 @@ def _healthy_check_readings():                                          # helper
         "gcs":       {"bucket_sizes": {}},                             # no buckets over limit
         "cloud_run": {"services": [{"name": "bike-demand-api", "min_instances": 0}]},  # one approved service at scale-to-zero
         "cloud_run_errors": {"memory_errors": {}},                     # no memory-limit errors in the last 24 h
+        "gbfs_poller": {"requests": 288, "billed_seconds": 1150.0, "longest_seconds": 6.0, "feed_age_minutes": 4},  # normal poller day
     }
 
 
@@ -431,6 +545,7 @@ def test_audit_handler_silent_when_all_healthy():
          patch("main.check_gcs",               return_value=healthy["gcs"]), \
          patch("main.check_cloud_run",         return_value=healthy["cloud_run"]), \
          patch("main.check_cloud_run_memory_errors", return_value=healthy["cloud_run_errors"]), \
+         patch("main.check_gbfs_poller",       return_value=healthy["gbfs_poller"]), \
          patch("main.send_alert")           as mock_alert:          # email must never be sent on a healthy day
         import main as audit_main                                       # import after patches are in place
         fake_request = MagicMock()                                      # functions-framework passes a Flask Request object
@@ -486,6 +601,7 @@ def test_audit_handler_sends_email_when_threshold_tripped(monkeypatch):
          patch("main.check_gcs",               return_value=tripped["gcs"]), \
          patch("main.check_cloud_run",         return_value=tripped["cloud_run"]), \
          patch("main.check_cloud_run_memory_errors", return_value=tripped["cloud_run_errors"]), \
+         patch("main.check_gbfs_poller",       return_value=tripped["gbfs_poller"]), \
          patch("main.send_alert")           as mock_alert:          # intercept email delivery
         mock_alert.return_value = True                                  # simulate email accepted
         body, status = audit_main.audit(MagicMock())

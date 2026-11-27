@@ -14,7 +14,7 @@ jobs:
   # Job 1: Lint
   lint:
     name: Ruff lint
-    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
+    runs-on: ubuntu-26.04        # pinned: trial run 45982327913 green on 26.04 (2026-11-27); never ubuntu-latest (guard job)
     steps:
       - uses: actions/checkout@v6                # check out source
       - uses: actions/setup-python@v6            # provision Python
@@ -26,7 +26,7 @@ jobs:
   # Job 2: Test
   test:
     name: pytest
-    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
+    runs-on: ubuntu-26.04        # pinned: trial run 45982327913 green on 26.04 (2026-11-27); never ubuntu-latest (guard job)
     needs: lint                                  # skip tests if lint fails
     steps:
       - uses: actions/checkout@v6                # check out source
@@ -40,7 +40,7 @@ jobs:
   # Job 3: Docker Build
   docker:
     name: Docker build
-    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
+    runs-on: ubuntu-26.04        # pinned: trial run 45982327913 green on 26.04 (2026-11-27); never ubuntu-latest (guard job)
     needs: test                                  # only build image if tests pass
     steps:
       - uses: actions/checkout@v6                # check out source
@@ -51,7 +51,7 @@ jobs:
   # uses GITHUB_TOKEN — no manual secrets required
   publish:
     name: Push to GHCR
-    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
+    runs-on: ubuntu-26.04        # pinned: trial run 45982327913 green on 26.04 (2026-11-27); never ubuntu-latest (guard job)
     needs: docker                                # only publish if docker build passes
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -77,7 +77,7 @@ jobs:
   # GAR path: us-central1-docker.pkg.dev/bike-demand-ml-system/bike-demand-repo/bike-demand-ml-system
   publish-gar:
     name: Push to GAR + redeploy Cloud Run
-    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
+    runs-on: ubuntu-26.04        # pinned: trial run 45982327913 green on 26.04 (2026-11-27); never ubuntu-latest (guard job)
     needs: docker                                # only publish if docker build passes
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
@@ -112,7 +112,7 @@ jobs:
   # Expected wall time: ~5 min (6 RF training runs).
   accuracy:
     name: RMSE accuracy gates
-    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
+    runs-on: ubuntu-26.04        # pinned: trial run 45982327913 green on 26.04 (2026-11-27); never ubuntu-latest (guard job)
     needs: lint                                   # parallel to test job; skip only if lint fails
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
@@ -129,7 +129,7 @@ jobs:
   # if any workflow uses a moving "-latest" runner label.
   runner-pin-guard:
     name: Runner pin guard                                   # label shown in the Actions UI
-    runs-on: ubuntu-24.04        # pinned: proven on 24.04, 26.04 not yet trialled; never ubuntu-latest (guard job)
+    runs-on: ubuntu-26.04        # pinned: trial run 45982327913 green on 26.04 (2026-11-27); never ubuntu-latest (guard job)
     steps:
       - uses: actions/checkout@v6                                     # check out the workflow files
       - name: Fail on moving runner labels                   # the fail-safe check

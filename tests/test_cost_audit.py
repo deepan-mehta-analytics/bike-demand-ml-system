@@ -137,7 +137,64 @@ def test_format_alert_message_contains_key_fields():                    # no fix
     assert "bike-demand-api" in msg                                     # registry package name must appear
     assert "instance-old" in msg                                        # VM name must appear
     assert "400" in msg                                                 # spend amount must appear
-    assert "Thresholds Tripped" in msg                                  # header line must appear
+    assert "3 problems found" in msg                                    # plain header with the count
+
+
+# ── Plain-English wording (2026-11-27, owner: "understood right away") ──────
+from notify import plain_summary, describe_alert                        # plain-language helpers under test  # noqa: E402
+
+ALL_ALERT_EXAMPLES = [                                                  # one example of every alert type the audit can raise
+    {"check": "registry_versions", "pkg": "cost-audit", "count": 9, "limit": 7},
+    {"check": "registry_size", "total_gb": 3.4, "limit": 3.0},
+    {"check": "compute_vms", "vms": ["vm-1"]},
+    {"check": "vertex_endpoints", "endpoints": ["ep-1"]},
+    {"check": "bigquery_size", "total_gb": 8.5, "limit": 8.0},
+    {"check": "gcs_bucket", "bucket": "b1", "size_gb": 5.5, "limit": 5.0},
+    {"check": "cloud_run_unknown", "service": "mystery"},
+    {"check": "cloud_run_always_on", "service": "bike-demand-api", "min_instances": 1},
+    {"check": "spend_mtd", "mtd_cost_inr": 400.0, "limit": 300.0},
+    {"check": "cloud_run_memory_errors", "service": "bike-demand-api", "count": 3, "limit": 0},
+    {"check": "check_failed", "label": "gbfs_poller", "error": "403"},
+    {"check": "gbfs_poller_requests", "count": 900, "limit": 320},
+    {"check": "gbfs_poller_runtime", "billed_seconds": 9000.0, "longest_seconds": 60.0, "limit": 2880},
+    {"check": "gbfs_poller_feed_stale", "age_minutes": 180, "limit": 60},
+]
+
+
+@pytest.mark.parametrize("alert", ALL_ALERT_EXAMPLES, ids=lambda a: a["check"])
+def test_every_alert_has_a_plain_sentence_and_an_action(alert):
+    """Each alert type explains what happened and what to do, in words, not jargon placeholders."""
+    what, action = describe_alert(alert)                                # (what happened, what to do)
+    assert what and action                                              # both parts present
+    assert "Unknown check" not in what                                  # a real branch exists for every type
+
+
+def test_registry_versions_says_no_action_needed():
+    """The common self-clearing alert tells the reader they can ignore it."""
+    what, action = describe_alert(ALL_ALERT_EXAMPLES[0])               # registry versions example
+    assert "9" in what and "cost-audit" in what                         # numbers and name shown
+    assert "no action needed" in action.lower()                         # reassures the reader
+
+
+def test_slack_message_shows_what_to_do_for_each_problem():
+    """Slack text lists each problem with its own 'What to do' line."""
+    msg = format_alert_message(ALL_ALERT_EXAMPLES[:2])                 # two problems
+    assert "2 problems found" in msg                                    # count in the header
+    assert msg.count("What to do") == 2                                 # one action line per problem
+
+
+def test_plain_summary_is_one_line_without_slack_markup():
+    """The email summary is a single line (it travels inside one log entry) with no Slack formatting."""
+    text = plain_summary(ALL_ALERT_EXAMPLES[:2])                        # two problems
+    assert "\n" not in text                                             # single log line
+    assert "`" not in text and "*" not in text                          # no Slack markup characters
+    assert text.startswith("1) ") and " 2) " in text                    # numbered problems
+    assert "What to do:" in text                                        # actions included
+
+
+def test_single_problem_header_is_singular():
+    """One problem reads '1 problem found', not '1 problems'."""
+    assert "1 problem found" in format_alert_message(ALL_ALERT_EXAMPLES[:1])
 
 
 def test_send_alert_returns_true_on_success():                          # no fixture needed — only mocks are used
@@ -556,7 +613,7 @@ def test_audit_handler_silent_when_all_healthy():
     mock_alert.assert_not_called()                                      # core contract: no email on a healthy day
 
 
-def test_audit_handler_sends_email_when_threshold_tripped(monkeypatch):
+def test_audit_handler_sends_email_when_threshold_tripped(monkeypatch, caplog):
     """Handler calls send_alert exactly once when at least one threshold is breached."""
     import sys                                                          # needed to inject a fake secretmanager into sys.modules
 
@@ -604,7 +661,11 @@ def test_audit_handler_sends_email_when_threshold_tripped(monkeypatch):
          patch("main.check_gbfs_poller",       return_value=tripped["gbfs_poller"]), \
          patch("main.send_alert")           as mock_alert:          # intercept email delivery
         mock_alert.return_value = True                                  # simulate email accepted
-        body, status = audit_main.audit(MagicMock())
+        with caplog.at_level("INFO"):                                   # capture the handler's log lines
+            body, status = audit_main.audit(MagicMock())
 
     assert status == 200                                                # always 200
     mock_alert.assert_called_once()                                     # exactly one email when a threshold trips
+    complete = [r.getMessage() for r in caplog.records if "Audit complete" in r.getMessage()]  # the line the email alert watches
+    assert complete and complete[0].startswith("Audit complete: 1 threshold(s) tripped || 1) ")  # count + plain summary on one line
+    assert "What to do:" in complete[0]                                 # the email gets the action too

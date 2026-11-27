@@ -15,7 +15,7 @@ from checks import (                                                    # all se
     check_gbfs_poller,                                                  # poller runaway calls / runtime and silent stop
 )
 from thresholds import evaluate_thresholds                              # pure threshold evaluation — no GCP calls
-from notify import format_alert_message, send_alert                     # message formatting + email delivery
+from notify import format_alert_message, plain_summary, send_alert      # Slack message, one-line email summary, Slack delivery
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO)                                # emit INFO+ to stdout so Cloud Logging picks it up
@@ -62,11 +62,15 @@ def audit(request):
 
     # ── Evaluate thresholds ────────────────────────────────────────────────────
     alerts = evaluate_thresholds(readings)                              # returns [] if all checks are within thresholds
-    logger.info(f"Audit complete: {len(alerts)} threshold(s) tripped") # log outcome; count is the key signal
-
     if not alerts:                                                      # alert-only contract: silent on healthy days
+        logger.info("Audit complete: 0 threshold(s) tripped")          # healthy outcome (the email alert ignores 0)
         logger.info("All checks healthy — Slack notification suppressed")
         return ("OK — all checks healthy", 200)                        # 200 so Scheduler marks the job successful
+
+    # ── Log the outcome for the email alert ───────────────────────────────────
+    # Cloud Monitoring policy "cost-audit found a problem" matches this line and
+    # copies the count and everything after "|| " into the email.
+    logger.info(f"Audit complete: {len(alerts)} threshold(s) tripped || {plain_summary(alerts)}")  # one line, plain words
 
     # ── Format + deliver ───────────────────────────────────────────────────────
     message = format_alert_message(alerts)                              # convert alert dicts to a Slack-ready string

@@ -141,7 +141,7 @@ def test_format_alert_message_contains_key_fields():                    # no fix
 
 
 # ── Plain-English wording (2026-11-27, owner: "understood right away") ──────
-from notify import plain_summary, describe_alert                        # plain-language helpers under test  # noqa: E402
+from notify import plain_summary, describe_alert, overall_urgency, URGENCY_ORDER  # plain-language helpers under test  # noqa: E402
 
 ALL_ALERT_EXAMPLES = [                                                  # one example of every alert type the audit can raise
     {"check": "registry_versions", "pkg": "cost-audit", "count": 9, "limit": 7},
@@ -162,25 +162,42 @@ ALL_ALERT_EXAMPLES = [                                                  # one ex
 
 
 @pytest.mark.parametrize("alert", ALL_ALERT_EXAMPLES, ids=lambda a: a["check"])
-def test_every_alert_has_a_plain_sentence_and_an_action(alert):
-    """Each alert type explains what happened and what to do, in words, not jargon placeholders."""
-    what, action = describe_alert(alert)                                # (what happened, what to do)
-    assert what and action                                              # both parts present
-    assert "Unknown check" not in what                                  # a real branch exists for every type
+def test_every_alert_has_urgency_what_why_and_action(alert):
+    """Each alert type has an urgency tag and explains what happened, why it matters and what to do."""
+    d = describe_alert(alert)                                           # {"urgency", "what", "why", "action"}
+    assert d["urgency"] in URGENCY_ORDER                                # one of the three tags
+    assert d["what"] and d["why"] and d["action"]                       # every part present
+    assert "Unknown check" not in d["what"]                             # a real branch exists for every type
 
 
 def test_registry_versions_says_no_action_needed():
-    """The common self-clearing alert tells the reader they can ignore it."""
-    what, action = describe_alert(ALL_ALERT_EXAMPLES[0])               # registry versions example
-    assert "9" in what and "cost-audit" in what                         # numbers and name shown
-    assert "no action needed" in action.lower()                         # reassures the reader
+    """The common self-clearing alert is tagged 'Can wait' and tells the reader they can ignore it."""
+    d = describe_alert(ALL_ALERT_EXAMPLES[0])                           # registry versions example
+    assert d["urgency"] == "Can wait"                                   # least urgent tag
+    assert "9" in d["what"] and "cost-audit" in d["what"]              # numbers and name shown
+    assert "no action needed" in d["action"].lower()                    # reassures the reader
 
 
-def test_slack_message_shows_what_to_do_for_each_problem():
-    """Slack text lists each problem with its own 'What to do' line."""
+def test_costly_resources_are_act_now():
+    """Anything that bills by the hour (VMs, Vertex endpoints, always-on services) is 'Act now'."""
+    for alert in ALL_ALERT_EXAMPLES[2:4] + ALL_ALERT_EXAMPLES[7:8]:     # VMs, Vertex endpoints, always-on
+        assert describe_alert(alert)["urgency"] == "Act now"
+
+
+def test_overall_urgency_is_the_most_urgent_problem():
+    """The headline tag is the most urgent tag among the problems."""
+    assert overall_urgency(ALL_ALERT_EXAMPLES[:1]) == "Can wait"        # registry versions only
+    assert overall_urgency(ALL_ALERT_EXAMPLES[:3]) == "Act now"         # includes a running VM
+
+
+def test_slack_message_shows_tag_why_and_what_to_do_for_each_problem():
+    """Slack text lists each problem with its tag, a 'Why it matters' line and a 'What to do' line."""
     msg = format_alert_message(ALL_ALERT_EXAMPLES[:2])                 # two problems
     assert "2 problems found" in msg                                    # count in the header
+    assert "[Can wait]" in msg and "[Check soon]" in msg               # per-problem tags
+    assert msg.count("Why it matters") == 2                             # one reason per problem
     assert msg.count("What to do") == 2                                 # one action line per problem
+    assert "Act now = " in msg                                          # tag legend included
 
 
 def test_plain_summary_is_one_line_without_slack_markup():
@@ -188,8 +205,15 @@ def test_plain_summary_is_one_line_without_slack_markup():
     text = plain_summary(ALL_ALERT_EXAMPLES[:2])                        # two problems
     assert "\n" not in text                                             # single log line
     assert "`" not in text and "*" not in text                          # no Slack markup characters
-    assert text.startswith("1) ") and " 2) " in text                    # numbered problems
-    assert "What to do:" in text                                        # actions included
+    assert text.startswith("1) [Can wait] ") and " 2) [Check soon] " in text  # numbered, tagged problems
+    assert "Why it matters:" in text and "What to do:" in text          # reasons and actions included
+
+
+def test_plain_summary_stays_under_the_email_copy_limit():
+    """Many problems are cut short with a pointer to Slack, so the email copy is never silently truncated."""
+    text = plain_summary(ALL_ALERT_EXAMPLES)                            # all 14 alert types at once
+    assert len(text) <= 950                                             # under Google's ~1,000-character copy limit
+    assert text.endswith("(full list in Slack #cost-alerts)")           # tells the reader where the rest is
 
 
 def test_single_problem_header_is_singular():
@@ -667,5 +691,5 @@ def test_audit_handler_sends_email_when_threshold_tripped(monkeypatch, caplog):
     assert status == 200                                                # always 200
     mock_alert.assert_called_once()                                     # exactly one email when a threshold trips
     complete = [r.getMessage() for r in caplog.records if "Audit complete" in r.getMessage()]  # the line the email alert watches
-    assert complete and complete[0].startswith("Audit complete: 1 threshold(s) tripped || 1) ")  # count + plain summary on one line
-    assert "What to do:" in complete[0]                                 # the email gets the action too
+    assert complete and complete[0].startswith("Audit complete: 1 threshold(s) tripped [Can wait] || 1) [Can wait] ")  # count, headline tag, summary
+    assert "Why it matters:" in complete[0] and "What to do:" in complete[0]  # the email gets the reason and action too

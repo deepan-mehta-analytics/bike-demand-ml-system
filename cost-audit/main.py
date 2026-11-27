@@ -15,7 +15,7 @@ from checks import (                                                    # all se
     check_gbfs_poller,                                                  # poller runaway calls / runtime and silent stop
 )
 from thresholds import evaluate_thresholds                              # pure threshold evaluation — no GCP calls
-from notify import format_alert_message, plain_summary, send_alert      # Slack message, one-line email summary, Slack delivery
+from notify import format_alert_message, plain_summary, overall_urgency, send_alert  # Slack message, email summary + tag, Slack delivery
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO)                                # emit INFO+ to stdout so Cloud Logging picks it up
@@ -69,8 +69,8 @@ def audit(request):
 
     # ── Log the outcome for the email alert ───────────────────────────────────
     # Cloud Monitoring policy "cost-audit found a problem" matches this line and
-    # copies the count and everything after "|| " into the email.
-    logger.info(f"Audit complete: {len(alerts)} threshold(s) tripped || {plain_summary(alerts)}")  # one line, plain words
+    # copies the count, the [tag] and everything after "|| " into the email.
+    logger.info(f"Audit complete: {len(alerts)} threshold(s) tripped [{overall_urgency(alerts)}] || {plain_summary(alerts)}")  # one line, plain words
 
     # ── Format + deliver ───────────────────────────────────────────────────────
     message = format_alert_message(alerts)                              # convert alert dicts to a Slack-ready string

@@ -83,7 +83,7 @@ It implements:
 | ASGI Server | uvicorn | Production-grade ASGI server for FastAPI |
 | Containerisation | Docker + Docker Compose | python:3.11-slim image; all 6 city models baked into image at build time |
 | Testing | pytest + httpx + anyio | Schema guard, RMSE + model-size gates (6 cities), routing guarantee, async API tests |
-| Linting / CI | ruff + GitHub Actions | Lint → test → docker build → RMSE accuracy gates (Job 6) on push to main |
+| Linting / CI | ruff + GitHub Actions | Lint → test → docker build → RMSE accuracy gates (Job 6) on push to main; runners pinned to `ubuntu-26.04` (moved from 24.04 after a green trial run, 2026-11-27) and a guard job fails on any `*-latest` label |
 | Experiment Tracking | MLflow *(v4.0.0)* | GCS-backed run tracking, model registry, RMSE gate |
 | ML Platform | Vertex AI *(v4.0.0)* | Managed CustomJob for weekly hyperparameter sweep |
 
@@ -136,7 +136,7 @@ bike-demand-ml-system/
 │
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                      ← ruff lint → pytest → docker build on every push
+│       └── ci.yml                      ← lint → pytest → docker build → GHCR + GAR push → Cloud Run deploy; RMSE gates; runner pin guard (all on ubuntu-26.04)
 │
 ├── data/
 │   ├── prepare_city_data.py            ← normalise city CSVs to Seoul schema

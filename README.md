@@ -8,8 +8,8 @@ This project started as the **Python ML backend** for a companion R Shiny capsto
 
 - **Multi-city Random Forest inference API** — per-city RF models for all 6 cities (Seoul, London, NYC, Washington DC, Paris, Chicago) served via a Pydantic-validated `/predict` endpoint on GCP Cloud Run; lazy-loaded singleton service layer decouples business logic from the API surface; train/serve feature schema persisted via `joblib` to prevent skew. Since v4.5.1 the six models are size-capped per city (~146 MB together, ~8× smaller) so they all fit in one 512 MiB instance, with equal or better RMSE in 4 of 6 cities, and a CI gate fails any model that grows back.
 - **Vertex AI managed retraining** — a `bike-demand-trigger` Cloud Run service submitted a 6-combo hyperparameter sweep to Vertex AI every Sunday; results tracked in SQLite + GCS-backed MLflow; a 3% RMSE gate enforced model quality before any city model was promoted to the Production registry. *(Deactivated June 2026 — portfolio mode; static models are sufficient for demos. Re-enable by redeploying `bike-demand-trigger` and restoring the Cloud Scheduler cron.)*
-- **Per-city data pipelines** — Open-Meteo historical API + GBFS open data fetchers for each city; Seoul rebuilt to a 4-year OA-15182 hourly scope (v4.2.0 → refreshed 2026-06-02, 35,063 rows, RMSE 1,386.77); Paris re-aligned to wall-clock-local time with a 2022 anomaly data-quality drop (v4.3.0, RMSE 20.51). GBFS live station feed paused June 2026 — resume with one `gcloud scheduler jobs resume` command.
-- **CI-enforced accuracy gates** — 78-test pytest suite (46 ML inference + data + 32 cost-audit): schema guards, per-city RMSE + model-size gates, no-fallback routing guarantees, Dataflow pipeline contracts, GBFS 5-min window aggregator unit tests, and GCP resource health checks; enforced on every push via GitHub Actions.
+- **Per-city data pipelines** — Open-Meteo historical API + GBFS open data fetchers for each city; Seoul rebuilt to a 4-year OA-15182 hourly scope (v4.2.0 → refreshed 2026-06-02, 35,063 rows, RMSE 1,386.77); Paris re-aligned to wall-clock-local time with a 2022 anomaly data-quality drop (v4.3.0, RMSE 20.51). GBFS live station feed live again since 2026-11-27 (paused June–November for zero cost) with hard runaway limits and daily cost-audit alerts.
+- **CI-enforced accuracy gates** — 88-test pytest suite (46 ML inference + data + 42 cost-audit): schema guards, per-city RMSE + model-size gates, no-fallback routing guarantees, Dataflow pipeline contracts, GBFS 5-min window aggregator unit tests, and GCP resource health checks; enforced on every push via GitHub Actions.
 
 **Engineering choices that signal the skills**
 
@@ -48,7 +48,7 @@ Three decisions in the version history show judgment beyond "make it work":
 [![Status](https://img.shields.io/badge/v4.5.1-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system/releases/tag/v4.5.1)
 [![Status](https://img.shields.io/badge/v3.1.0-Released-success?style=for-the-badge)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
 [![Cloud Run](https://img.shields.io/badge/Cloud_Run-Live-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://bike-demand-api-76372oragq-uc.a.run.app)
-[![GBFS Poller](https://img.shields.io/badge/GBFS_Poller-Paused-lightgrey?style=for-the-badge&logo=googlecloud&logoColor=white)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
+[![GBFS Poller](https://img.shields.io/badge/GBFS_Poller-Live-brightgreen?style=for-the-badge&logo=googlecloud&logoColor=white)](https://github.com/deepan-mehta-analytics/bike-demand-ml-system)
 [![Prometheus](https://img.shields.io/badge/Prometheus-metrics-orange?style=for-the-badge&logo=prometheus&logoColor=white)](https://bike-demand-api-76372oragq-uc.a.run.app/metrics)
 
 ---
@@ -191,7 +191,7 @@ bike-demand-ml-system/
 │   ├── __init__.py                     ← marks pipeline/ as a Python package
 │   ├── gbfs_to_pubsub.py               ← legacy: GBFS station poller → Pub/Sub topic (v3.0.0 Dataflow path; superseded by gbfs_poller_service.py in v3.1.0)
 │   ├── dataflow_job.py                 ← legacy: Apache Beam Pub/Sub → 5-min FixedWindows → BigQuery (retained intact)
-│   ├── gbfs_poller_service.py          ← v3.1.0 Cloud Run service: poll GBFS feeds → 5-min window agg → BigQuery direct insert (zero-cost replacement for Dataflow path)
+│   ├── gbfs_poller_service.py          ← v3.1.0 Cloud Run service: poll GBFS feeds → 5-min window agg → BigQuery free batch load (zero-cost replacement for Dataflow path)
 │   ├── window_agg.py                   ← v3.1.0 pure-Python helper: group GBFS snapshots by (city, station) → avg/min/max bike counts per window
 │   ├── retrain_job.py                  ← Vertex AI entry point: 6-combo sweep → MLflow → RMSE gate → Model Registry
 │   └── vertex_trigger.py               ← Cloud Run HTTP handler: POST /trigger → submit CustomJob async
@@ -423,7 +423,7 @@ python models/train.py
 pytest tests/
 ```
 
-The suite has nine modules (78 tests) across three tiers — 46 for the ML inference API and data fetchers, and 32 for the `cost-audit` service:
+The suite has nine modules (88 tests) across three tiers — 46 for the ML inference API and data fetchers, and 42 for the `cost-audit` service:
 
 | Module | Type | What it covers |
 |---|---|---|
@@ -435,7 +435,7 @@ The suite has nine modules (78 tests) across three tiers — 46 for the ML infer
 | `tests/test_pipeline.py` | Unit + Pipeline | Legacy Dataflow path: GBFS/TFL snapshot schema, ParseMessage DoFn, DirectRunner end-to-end; auto-skipped unless `requirements-pipeline.txt` is installed |
 | `tests/test_window_agg.py` | Unit | v3.1.0 poller: 5-minute window aggregator — empty input, single snapshot degenerate stats, multi-snapshot avg/min/max, multi-city/station keying, 2-decimal rounding parity with the Dataflow path |
 | `tests/test_gbfs_poller_service.py` | Unit | v3.1.0 poller: FastAPI service contract — health endpoint, poller trigger response shape |
-| `tests/test_cost_audit.py` | Unit + Integration | `cost-audit` service: `evaluate_thresholds` (14 tests across 11 check domains, incl. Cloud Run memory errors and failed checks), `format_alert_message` + `send_alert` (5 tests), 8 resource-reading functions with mocked GCP clients (11 tests), `audit()` HTTP handler integration (2 tests — healthy silent, tripped Slack call) |
+| `tests/test_cost_audit.py` | Unit + Integration | `cost-audit` service: `evaluate_thresholds` (21 tests across 12 check domains, incl. Cloud Run memory errors, GBFS poller runaway/stale feed and failed checks), `format_alert_message` + `send_alert` (6 tests), 9 resource-reading functions with mocked GCP clients (13 tests), `audit()` HTTP handler integration (2 tests — healthy silent, tripped Slack call) |
 
 ```bash
 # Fast suite (schema, API, routing — excludes RMSE gates)
@@ -711,6 +711,8 @@ Replaces the paused Dataflow streaming path with a zero-always-free-tier Cloud R
 - [x] `tests/test_gbfs_poller_service.py` — 3 tests on the FastAPI service contract
 - [x] GCP provisioned — `gbfs-poller` Cloud Run service deployed to `us-central1`; `gbfs-poller-cron` Cloud Scheduler job (every 5 min); BigQuery `station_snapshots` table re-partitioned with a 7-day expiry; service account + IAM bindings
 - [x] End-to-end verified — 6,032 rows / 5-minute window across NYC / DC / London / Chicago; GCP Stream tab in the companion R Shiny dashboard now streams within ~10 min of scheduler start
+- [x] Paused June 2026 (zero-cost hold; service and image later deleted) → **restarted 2026-11-27** with hard runaway limits: max 1 instance, concurrency 1, 60 s request timeout, 1 vCPU / 512 MiB, scale-to-zero, private (OIDC invoker only); scheduler attempt deadline 60 s with no retries. First poll 3.6 s, 6,278 rows. Worst case with these limits is bounded at ~60 s × 288 polls/day, and the daily cost-audit alerts long before that (see Phase 9). Estimated cost ₹1–3/month (registry storage only; Cloud Run, Scheduler and BigQuery within free tiers)
+- **To pause again:** `gcloud scheduler jobs pause gbfs-poller-cron --location=us-central1` and set `gbfs_poller_expected_on=False` in `cost-audit/thresholds.py`. **To restart after a full teardown:** build and push `Dockerfile.poller` to `bike-demand-repo/gbfs-poller`, deploy `gbfs-poller` with the limits above and `--service-account gbfs-poller-sa`, grant that service account `roles/run.invoker` on the service, then `gcloud scheduler jobs resume gbfs-poller-cron --location=us-central1`
 - [x] CI hotfix `7d43a81` — removed unused `import pytest` in `tests/test_window_agg.py` that gated Ruff lint for 4 commits running
 - [x] Cost optimization (2026-05-28) — `/poll` now takes a **single snapshot per 5-minute window** (`POLL_ITERATIONS=1`), down from 5 polls with 4×60s in-request sleeps. Cloud Run billed the full ~248s/run on 1 vCPU (~$46/mo, over the always-free tier); each run is now ~4s. The dashboard's min/max ribbon is driven by cross-station spread (the Shiny query takes `MIN`/`MAX` across stations), not intra-window time samples, so a single snapshot per station is visually identical. `window_agg` is unchanged — it already returns degenerate avg=min=max stats for a one-sample window.
 
@@ -719,11 +721,12 @@ Replaces the paused Dataflow streaming path with a zero-always-free-tier Cloud R
 A daily read-only audit that catches resource accumulation (registry bloat, forgotten VMs, growing BQ/GCS, unexpected services, Vertex endpoints) and month-to-date overspend early — built so the automation itself **cannot** add cost. Born from the Artifact Registry silently growing to ~38 GB / 140 image versions because CI pushed an image on every commit with nothing pruning them.
 
 - [x] `cost-audit/thresholds.py` — pure `evaluate_thresholds(readings)`: tunable threshold config + per-domain alert logic; no GCP calls (trivially unit-testable)
-- [x] `cost-audit/checks.py` — 7 read-only resource readers at ship (Artifact Registry, Compute, Vertex via REST, BigQuery storage + MTD billing query, GCS, Cloud Run via REST), 8 since 2026-11-26 (+ Cloud Run memory-limit errors via Cloud Logging); each independent so one failed read never aborts the scan
+- [x] `cost-audit/checks.py` — 7 read-only resource readers at ship (Artifact Registry, Compute, Vertex via REST, BigQuery storage + MTD billing query, GCS, Cloud Run via REST), 8 since 2026-11-26 (+ Cloud Run memory-limit errors via Cloud Logging), 9 since 2026-11-27 (+ GBFS poller calls, runtime and data freshness); each independent so one failed read never aborts the scan
 - [x] `cost-audit/notify.py` — `format_alert_message` (Slack mrkdwn) + `send_alert` (incoming-webhook POST)
 - [x] `cost-audit/main.py` — functions-framework HTTP handler: runs all checks, evaluates, posts to Slack **only on breach** (silent on healthy days), always returns 200, `DRY_RUN` support
-- [x] `tests/test_cost_audit.py` — 26 tests at v4.4.0 ship (11 threshold eval + 4 notify + 9 mocked check functions + 2 handler integration); 32 after the 2026-11-26 memory-error check (+2 check, +3 threshold, +1 notify)
+- [x] `tests/test_cost_audit.py` — 26 tests at v4.4.0 ship (11 threshold eval + 4 notify + 9 mocked check functions + 2 handler integration); 32 after the 2026-11-26 memory-error check (+2 check, +3 threshold, +1 notify); 42 after the 2026-11-27 poller check (+2 check, +7 threshold, +1 notify)
 - [x] Cloud Run memory-error check (2026-11-26, after v4.5.1) — `check_cloud_run_memory_errors()` counts "Memory limit of … exceeded" log entries per service over 24 h via the Cloud Logging REST API and alerts on any; a check that raises now posts a `check_failed` alert instead of silently looking healthy. Needs `roles/logging.viewer` on `cost-audit-sa` and a redeploy of `cost-audit` to go live
+- [x] GBFS poller check (2026-11-27, poller restart) — `check_gbfs_poller()` reads the poller's Cloud Run request logs (calls + summed latency) and the newest `station_snapshots` row; alerts on > 320 calls/day (schedule = 288), > 2,880 s runtime/day (normal ~1,150 s; free tier ends near ~5,500 s), or data older than 60 min (silent stop). Live on `cost-audit-00009-7xm`; first run read 2 calls, 4 s, data 4 min old → no poller alert
 - [x] GCP provisioned — private `cost-audit` Cloud Run service (`maxScale=1`, read-only `cost-audit-sa`); `cost-audit-cron` Cloud Scheduler (daily 09:00 UTC, OIDC); Slack webhook URL in Secret Manager
 - [x] Cost-safety — Scheduler-triggered (not Pub/Sub-push, structurally avoids the kill-switch retry-storm); all free-tier reads; no Cloud Monitoring custom-metric writes; ~450 vCPU-sec/month vs 180k free
 - [x] End-to-end verified — live run tripped 2 real registry-bloat thresholds and delivered the alert to Slack; delivery switched email → Slack incoming webhook (Microsoft app passwords require 2FA + consumer Outlook SMTP basic-auth is deprecated)
